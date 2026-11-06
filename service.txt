@@ -1,0 +1,50 @@
+AI 诊所经营模拟器后端服务架构
+
+backend/src/main/scala/
+├── app/
+│   ├── Main.scala                 # 应用启动入口
+│   ├── ApiRouter.scala            # 组合健康检查和业务 API
+│   └── HealthRouter.scala         # 健康检查
+│
+└── services/
+    ├── system/                   # 共享基础设施
+    │   ├── api/                   # APIMessage、统一消息路由和注册表
+    │   ├── database/              # PostgreSQL、连接池、事务、JDBC 工具
+    │   └── HttpError.scala        # 统一 HTTP 错误
+    │
+    ├── game/                     # 游戏状态和经营日流程编排
+    │   ├── api/
+    │   ├── managers/              # 协调聚合对象和游戏流程
+    │   ├── objects/
+    │   ├── routes/GameRoutes.scala
+    │   ├── tables/
+    │   ├── calculators/
+    │   └── utils/
+    │
+    ├── economy/                  # 现金流、工资、利润、破产
+    ├── patient/                  # 患者生成、人格、队列、生命周期
+    ├── consultation/             # 接诊、对话、情绪、治疗方案评价
+    ├── pharmacy/                 # 药品、采购、库存、过期处理
+    ├── reputation/               # 声誉计算和患者生态分布
+    ├── event/                    # 随机事件、风险、季节
+    └── clinic/                   # 诊所、员工、安保、设施
+
+每个核心业务服务均采用：
+
+    api/                          # API Message 和业务编排入口
+    objects/                      # 领域、请求、响应、参数对象
+    routes/                       # 注册本服务的 API Message
+    tables/                       # 数据库访问和表初始化
+    calculators/                  # 确定性业务规则和公式
+    utils/                        # 解析器、适配器和辅助工具
+
+独立能力适配层：
+
+    services/ai/                  # LLM、Prompt、Memory；不直接修改游戏资产
+    services/voice/               # ASR、TTS、音频流；未来按需增加流式路由
+
+统一请求格式：
+
+    POST /api/messages/{service}/requests/{api-name}
+
+当前已完成游戏服务的开始游戏、查询状态、推进经营日 API，以及各业务领域的对象、计算器和数据库表初始化骨架；其他业务 API、AI 调用和语音调用待后续迭代。
