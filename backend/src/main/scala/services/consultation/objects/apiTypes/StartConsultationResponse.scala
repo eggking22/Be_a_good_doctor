@@ -10,7 +10,8 @@ final case class StartConsultationResponse(
     consultationId: String,
     patient: Patient,
     emotion: PatientEmotion,
-    status: ConsultationStatus
+    status: ConsultationStatus,
+    opening: PatientDialogueResponse
 )
 
 object StartConsultationResponse:

@@ -2,7 +2,9 @@
 package services.pharmacy.tables
 
 import cats.effect.IO
+import cats.syntax.all.*
 import services.pharmacy.objects.{Inventory, InventoryItem, Medicine, MedicineLevel, MedicinePrice}
+import services.system.HttpError
 import services.system.database.JdbcSupport
 
 import java.sql.Connection
@@ -18,6 +20,25 @@ object InventoryTable:
       statement.setInt(4, item.quantity)
       statement.setObject(5, java.time.LocalDate.parse(item.expiryDate))
     }.map(_ => ())
+
+  private val addStockSql =
+    """
+      |insert into medicine_inventory (id, game_id, medicine_id, quantity, expiry_date)
+      |values (?, ?, ?, ?, ?)
+      |on conflict (game_id, medicine_id, expiry_date)
+      |do update set quantity = medicine_inventory.quantity + excluded.quantity
+      |""".stripMargin
+
+  def addStock(connection: Connection, gameId: String, medicine: Medicine, quantity: Int, expiryDate: String): IO[Unit] =
+    if quantity <= 0 then IO.raiseError(HttpError.BadRequest("采购数量必须大于 0。"))
+    else
+      JdbcSupport.update(connection, addStockSql) { statement =>
+        statement.setString(1, s"inventory-${java.util.UUID.randomUUID()}")
+        statement.setString(2, gameId)
+        statement.setString(3, medicine.id)
+        statement.setInt(4, quantity)
+        statement.setObject(5, java.time.LocalDate.parse(expiryDate))
+      }.map(_ => ())
 
   private val selectSql =
     """
@@ -58,6 +79,27 @@ object InventoryTable:
 
   def findAggregateByGameId(connection: Connection, gameId: String): IO[Inventory] =
     findByGameId(connection, gameId).map(items => Inventory(items))
+
+  def consumeMedicine(connection: Connection, gameId: String, medicineId: String, quantity: Int): IO[Unit] =
+    if quantity <= 0 then IO.raiseError(HttpError.BadRequest("消耗数量必须大于 0。"))
+    else
+      findByGameId(connection, gameId).map(_.filter(_.medicine.id == medicineId).sortBy(_.expiryDate)).flatMap { lots =>
+        val available = lots.map(_.quantity).sum
+        if available < quantity then IO.raiseError(HttpError.Conflict(s"药品库存不足：$medicineId"))
+        else
+          lots.foldLeft(IO.pure(quantity)) { (remainingProgram, lot) =>
+            remainingProgram.flatMap { remaining =>
+              if remaining <= 0 then IO.pure(0)
+              else
+                val consumed = remaining.min(lot.quantity)
+                val nextQuantity = lot.quantity - consumed
+                val write =
+                  if nextQuantity == 0 then delete(connection, lot.id)
+                  else update(connection, lot.copy(quantity = nextQuantity))
+                write.as(remaining - consumed)
+            }
+          }.void
+      }
 
   private def readInventoryItem(resultSet: java.sql.ResultSet): InventoryItem =
     InventoryItem(

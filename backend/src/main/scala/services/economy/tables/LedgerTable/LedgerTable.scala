@@ -39,3 +39,21 @@ object LedgerTable:
         description = resultSet.getString("description")
       )
     }
+
+  private val findByGameIdAndDaySql =
+    "select id, game_id, transaction_type, amount, occurred_on, description from ledger_transactions where game_id = ? and occurred_on = ? order by id"
+
+  def findByGameIdAndDay(connection: Connection, gameId: String, day: Int): IO[List[LedgerTransaction]] =
+    JdbcSupport.query(connection, findByGameIdAndDaySql) { statement =>
+      statement.setString(1, gameId)
+      statement.setInt(2, day)
+    } { resultSet =>
+      LedgerTransaction(
+        id = resultSet.getString("id"),
+        gameId = resultSet.getString("game_id"),
+        transactionType = resultSet.getString("transaction_type"),
+        amount = BigDecimal(resultSet.getBigDecimal("amount")),
+        occurredOn = resultSet.getInt("occurred_on"),
+        description = resultSet.getString("description")
+      )
+    }

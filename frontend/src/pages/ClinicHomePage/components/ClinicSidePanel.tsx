@@ -1,13 +1,18 @@
 import type { ClinicPanel } from '@/pages/ClinicHomePage/objects/ClinicHomeViewState'
+import type { PharmacyOverview } from '@/objects/pharmacy/PharmacyOverview'
 
 interface ClinicSidePanelProps {
   panel: ClinicPanel
   isPatientPresent: boolean
   patientName: string | null
   isStartingConsultation: boolean
+  pharmacyOverview: PharmacyOverview | null
+  isLoadingPharmacy: boolean
+  purchasingMedicineId: string | null
   error: string | null
   onClose: () => void
   onWelcomePatient: () => Promise<void>
+  onPurchaseMedicine: (medicineId: string) => Promise<void>
 }
 
 const panelContent: Record<ClinicPanel, { title: string; eyebrow: string; icon: string; description: string }> = {
@@ -21,7 +26,7 @@ const panelContent: Record<ClinicPanel, { title: string; eyebrow: string; icon: 
     title: '药房',
     eyebrow: 'PHARMACY',
     icon: 'Rx',
-    description: '查看药品库存和保存期限。正式药房页面将在后续阶段接入。',
+    description: '查看现有库存，并在每日 08:30 的市场准备阶段采购药品。',
   },
   staff: {
     title: '员工休息室',
@@ -43,7 +48,7 @@ const panelContent: Record<ClinicPanel, { title: string; eyebrow: string; icon: 
   },
 }
 
-export default function ClinicSidePanel({ panel, isPatientPresent, patientName, isStartingConsultation, error, onClose, onWelcomePatient }: ClinicSidePanelProps) {
+export default function ClinicSidePanel({ panel, isPatientPresent, patientName, isStartingConsultation, pharmacyOverview, isLoadingPharmacy, purchasingMedicineId, error, onClose, onWelcomePatient, onPurchaseMedicine }: ClinicSidePanelProps) {
   const content = panelContent[panel]
 
   return (
@@ -83,7 +88,20 @@ export default function ClinicSidePanel({ panel, isPatientPresent, patientName, 
         </div>
       )}
 
-      {panel !== 'consultation' && (
+      {panel === 'pharmacy' && (
+        <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
+          {isLoadingPharmacy && <p className="pixel-card p-4 text-xs">正在读取药房库存…</p>}
+          {!isLoadingPharmacy && pharmacyOverview && (
+            <div className="space-y-4">
+              <div className="pixel-card p-3 text-xs leading-5"><p>当前现金：¥{pharmacyOverview.cash.toLocaleString('zh-CN')}</p><p className="mt-1 text-[#48718b]">{pharmacyOverview.canPurchase ? '市场已开门：可在 08:30 采购。' : '市场采购只在每日 08:30 的准备阶段开放。'}</p></div>
+              <section><h3 className="text-xs">现有药物</h3><div className="mt-2 space-y-2">{pharmacyOverview.inventory.items.length === 0 ? <p className="border-2 border-dashed border-[#6d98b2] p-3 text-[0.68rem] text-[#4c7187]">药房暂无库存。</p> : pharmacyOverview.inventory.items.map((item) => <div key={item.id} className="shopping-list-item flex items-center justify-between gap-3 p-2 text-[0.68rem]"><span>{item.medicine.name}</span><span>× {item.quantity}</span></div>)}</div></section>
+              <section><h3 className="text-xs">市场药品</h3><div className="mt-2 space-y-2">{pharmacyOverview.marketMedicines.map((medicine) => <div key={medicine.id} className="border-2 border-[#5f92af] bg-[#effaff] p-3"><div className="flex items-center justify-between gap-3 text-xs"><span>{medicine.name}</span><span>进 ¥{medicine.price.purchasePrice}</span></div><p className="mt-1 text-[0.6rem] text-[#4c7187]">售价 ¥{medicine.price.salePrice} · {medicine.level}</p><button type="button" disabled={!pharmacyOverview.canPurchase || purchasingMedicineId !== null} onClick={() => void onPurchaseMedicine(medicine.id)} className="pixel-button mt-2 px-3 py-1.5 text-[0.6rem] disabled:cursor-not-allowed disabled:opacity-50">{purchasingMedicineId === medicine.id ? '采购中…' : '采购 1 份'}</button></div>)}</div></section>
+            </div>
+          )}
+        </div>
+      )}
+
+      {panel !== 'consultation' && panel !== 'pharmacy' && (
         <div className="mt-auto border-2 border-dashed border-[#4783a8] bg-[#dff3ff] p-4 text-center text-[0.68rem] text-[#2c6489]">功能页面待开发</div>
       )}
     </aside>

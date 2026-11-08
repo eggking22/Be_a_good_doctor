@@ -12,6 +12,7 @@ import services.consultation.tables.{CaseSymptomTable, ConsultationTable, Patien
 import services.consultation.utils.{ConsultationIdGenerator, PatientCaseIdGenerator}
 import services.game.tables.GameStateTable
 import services.game.calculators.GameClock
+import services.patient.api.GeneratePatientAPIMessage
 import services.patient.tables.PatientTable
 import services.pharmacy.tables.{DiseaseSymptomTable, DiseaseTable}
 import services.system.HttpError
@@ -25,8 +26,14 @@ final case class StartConsultationAPIMessage(
     patientId: String
 ) extends APIMessage[StartConsultationResponse]:
   override def plan(connection: Connection): IO[StartConsultationResponse] =
-    val normalizedGameId = gameId.trim
-    val normalizedPatientId = patientId.trim
+    startWithOpening(connection, gameId.trim, patientId.trim, attempt = 1)
+
+  private def startWithOpening(
+      connection: Connection,
+      normalizedGameId: String,
+      normalizedPatientId: String,
+      attempt: Int
+  ): IO[StartConsultationResponse] =
     if normalizedGameId.isEmpty || normalizedPatientId.isEmpty then
       IO.raiseError(HttpError.BadRequest("游戏 ID 和患者 ID 不能为空。"))
     else
@@ -75,12 +82,26 @@ final case class StartConsultationAPIMessage(
           caseId = Some(patientCase.id)
         )
         _ <- ConsultationTable.create(connection, normalizedGameId, consultation)
-      yield StartConsultationResponse(
-        consultationId = consultation.id,
-        patient = patient,
-        emotion = consultation.emotion,
-        status = consultation.status
-      )
+        openingResult <- GeneratePatientOpeningDialogueAPIMessage(consultation.id).plan(connection).attempt
+        response <- openingResult match
+          case Right(opening) => IO.pure(StartConsultationResponse(
+            consultationId = consultation.id,
+            patient = patient,
+            emotion = consultation.emotion,
+            status = consultation.status,
+            opening = opening
+          ))
+          case Left(_) if attempt < StartConsultationAPIMessage.maximumOpeningAttempts =>
+            PatientTable.delete(connection, patient.id) *>
+              GeneratePatientAPIMessage(normalizedGameId).plan(connection).flatMap(replacement =>
+                startWithOpening(connection, normalizedGameId, replacement.id, attempt + 1)
+              )
+          case Left(_) =>
+            PatientTable.delete(connection, patient.id) *>
+              IO.raiseError(HttpError.Conflict("患者开场话术连续生成失败，已弃置本次患者并停止重试。"))
+      yield response
 
 object StartConsultationAPIMessage:
+  private[consultation] val maximumOpeningAttempts = 3
+
   given Codec.AsObject[StartConsultationAPIMessage] = deriveCodec

@@ -8,7 +8,7 @@ import services.consultation.objects.{ConsultationEndReason, ConsultationStatus,
 final case class EndConsultationResponse(
     playerMessage: DialogueMessage,
     patientMessage: DialogueMessage,
-    analysis: PlayerTextAnalysis,
+    analysis: Option[PlayerTextAnalysis],
     status: ConsultationStatus,
     endReason: ConsultationEndReason,
     shoppingList: List[PrescriptionItem],

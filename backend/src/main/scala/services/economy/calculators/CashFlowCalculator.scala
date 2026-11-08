@@ -4,7 +4,7 @@ package services.economy.calculators
 import services.economy.objects.{CashFlow, DailyStatement}
 
 object CashFlowCalculator:
-  private[economy] def settle(openingCash: BigDecimal, cashFlow: CashFlow): DailyStatement =
+  def settle(openingCash: BigDecimal, cashFlow: CashFlow): DailyStatement =
     // 净现金流属于经济计算，不放在 CashFlow 数据对象中。
     val netCashFlow = cashFlow.income - cashFlow.expense
     val closingCash = openingCash + netCashFlow

@@ -1,6 +1,8 @@
 import type { GameState } from '@/objects/game/GameState'
 import type { ClinicConversation } from '@/pages/ClinicHomePage/objects/ClinicConversation'
 import type { PatientPortrait } from '@/pages/ClinicHomePage/objects/PatientPortrait'
+import type { PharmacyOverview } from '@/objects/pharmacy/PharmacyOverview'
+import type { RecoveryFollowUp } from '@/objects/reputation/RecoveryFollowUp'
 
 export type ClinicPanel = 'consultation' | 'pharmacy' | 'staff' | 'finance' | 'expansion'
 
@@ -22,5 +24,9 @@ export interface ClinicHomeInteractionState {
   isSendingText: boolean
   isEndingConsultation: boolean
   isSettlingDay: boolean
+  pharmacyOverview: PharmacyOverview | null
+  isLoadingPharmacy: boolean
+  purchasingMedicineId: string | null
+  recoveryFollowUp: RecoveryFollowUp | null
   consultationError: string | null
 }

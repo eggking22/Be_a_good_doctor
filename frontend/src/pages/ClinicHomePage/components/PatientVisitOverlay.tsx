@@ -29,6 +29,7 @@ export default function PatientVisitOverlay({ patient, patientName, stage, messa
 
   const isConsulting = stage === 'consulting'
   const hasEnded = stage === 'ended'
+  const isConversationVisible = isConsulting || hasEnded
   const validMessages = messages.filter(isDialogueMessage)
   const lastPatientMessage = [...validMessages].reverse().find((message) => message.speaker === 'patient')
   const lastPlayerMessage = [...validMessages].reverse().find((message) => message.speaker === 'player')
@@ -78,7 +79,7 @@ export default function PatientVisitOverlay({ patient, patientName, stage, messa
             className={`h-full max-w-full select-none object-contain object-bottom drop-shadow-[5px_7px_0_rgba(4,28,51,0.45)] ${stage === 'entering' ? 'patient-portrait-entering' : ''}`}
           />
 
-          {isConsulting && (
+          {isConversationVisible && (
             <div className="pointer-events-auto absolute left-1/2 top-[31%] z-10 w-[min(84vw,25rem)] -translate-x-1/2 translate-y-[5vh] text-[#113f63]">
               <div className="patient-dialogue-box px-3 py-2 text-[0.68rem] leading-5 sm:px-4">
                 <p className="mb-1 text-[0.52rem] text-[#397ea8]">{patientName ?? '患者'}</p>
@@ -104,7 +105,7 @@ export default function PatientVisitOverlay({ patient, patientName, stage, messa
                   </button>
                 </form>
               )}
-              {hasEnded && <p className="mt-3 border-2 border-[#4b88aa] bg-[#dff3ff] px-3 py-2 text-[0.58rem] leading-4 text-[#275c7f]">{endMessage(endReason)}</p>}
+              {hasEnded && <p className="mt-3 border-2 border-[#4b88aa] bg-[#dff3ff] px-3 py-2 text-[0.58rem] leading-4 text-[#275c7f]">{endMessage(endReason, shoppingList.length > 0)}</p>}
               {error && <p role="alert" className="mt-2 border-2 border-[#a64e4e] bg-[#ffe2dc] px-3 py-2 text-[0.55rem] leading-4 text-[#8d3434]">{error}</p>}
             </div>
           )}
@@ -172,10 +173,10 @@ function isDialogueMessage(value: unknown): value is DialogueMessage {
     && typeof value.content === 'string'
 }
 
-function endMessage(reason: ConsultationEndReason | null): string {
+function endMessage(reason: ConsultationEndReason | null, hasPrescription: boolean): string {
   switch (reason) {
     case 'PlayerRequested': return '已按你的文字指令结束本次接诊，购物清单已保留。'
-    case 'DoctorEnded': return '医生已结束本次文字问诊，购物清单已保留。'
+    case 'DoctorEnded': return hasPrescription ? '医生已结束本次文字问诊，购物清单已保留。' : '患者未开药，对诊疗结果表示不满后离场。'
     case 'PatientLeft': return '患者已道谢离场，购物清单已保留，等待后续结算。'
     case 'RoundLimitReached': return '已达到十个问答回合上限，文字问诊自动结束。'
     default: return '本次文字问诊已结束，购物清单已保留。'

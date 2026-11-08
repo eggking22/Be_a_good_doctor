@@ -15,7 +15,10 @@ final case class Consultation(
     treatmentEvaluation: Option[TreatmentEvaluation],
     cashChange: BigDecimal,
     reputationChange: Double,
-    caseId: Option[String] = None
+    caseId: Option[String] = None,
+    settled: Boolean = false,
+    closedDay: Option[Int] = None,
+    followUpCompleted: Boolean = false
 )
 
 object Consultation:

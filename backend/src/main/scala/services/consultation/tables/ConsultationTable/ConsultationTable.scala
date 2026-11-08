@@ -15,8 +15,9 @@ object ConsultationTable:
     """
       |insert into consultations
       |  (id, game_id, patient_id, case_id, emotion, status, dialogue_count, cash_change,
-      |   reputation_change, treatment_matched, treatment_reputation_delta, treatment_reason)
-      |values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      |   reputation_change, settled, closed_day, follow_up_completed,
+      |   treatment_matched, treatment_reputation_delta, treatment_reason)
+      |values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       |""".stripMargin
 
   def create(connection: Connection, gameId: String, consultation: Consultation): IO[Unit] =
@@ -30,7 +31,10 @@ object ConsultationTable:
       statement.setInt(7, consultation.dialogueCount)
       statement.setBigDecimal(8, consultation.cashChange.bigDecimal)
       statement.setDouble(9, consultation.reputationChange)
-      bindTreatment(statement, consultation.treatmentEvaluation, 10)
+      statement.setBoolean(10, consultation.settled)
+      bindOptionalInt(statement, 11, consultation.closedDay)
+      statement.setBoolean(12, consultation.followUpCompleted)
+      bindTreatment(statement, consultation.treatmentEvaluation, 13)
     }.map(_ => ())
 
   private val findByIdSql = "where c.id = ?"
@@ -48,10 +52,26 @@ object ConsultationTable:
   def findByGameId(connection: Connection, gameId: String): IO[List[Consultation]] =
     baseQuery(connection, findByGameIdSql)(_.setString(1, gameId)).flatMap(_.traverse(enrichWithDialogue(connection)))
 
+  private val findEligibleForFollowUpSql =
+    """where c.game_id = ? and c.treatment_matched = true and c.follow_up_completed = false
+      |  and c.closed_day >= ? and c.closed_day < ? order by c.closed_day, c.id""".stripMargin
+
+  def findEligibleForFollowUp(connection: Connection, gameId: String, earliestDay: Int, currentDay: Int): IO[List[Consultation]] =
+    baseQuery(connection, findEligibleForFollowUpSql) { statement =>
+      statement.setString(1, gameId)
+      statement.setInt(2, earliestDay)
+      statement.setInt(3, currentDay)
+    }.flatMap(_.traverse(enrichWithDialogue(connection)))
+
+  private val markFollowUpCompletedSql = "update consultations set follow_up_completed = true where id = ?"
+
+  def markFollowUpCompleted(connection: Connection, consultationId: String): IO[Unit] =
+    JdbcSupport.updateExactlyOne(connection, markFollowUpCompletedSql, s"未找到接诊记录：$consultationId")(_.setString(1, consultationId))
+
   private val updateSql =
     """
       |update consultations set patient_id = ?, case_id = ?, emotion = ?, status = ?, dialogue_count = ?,
-      |cash_change = ?, reputation_change = ?, treatment_matched = ?,
+      |cash_change = ?, reputation_change = ?, settled = ?, closed_day = ?, follow_up_completed = ?, treatment_matched = ?,
       |treatment_reputation_delta = ?, treatment_reason = ? where id = ?
       |""".stripMargin
 
@@ -68,8 +88,11 @@ object ConsultationTable:
       statement.setInt(5, consultation.dialogueCount)
       statement.setBigDecimal(6, consultation.cashChange.bigDecimal)
       statement.setDouble(7, consultation.reputationChange)
-      bindTreatment(statement, consultation.treatmentEvaluation, 8)
-      statement.setString(11, consultation.id)
+      statement.setBoolean(8, consultation.settled)
+      bindOptionalInt(statement, 9, consultation.closedDay)
+      statement.setBoolean(10, consultation.followUpCompleted)
+      bindTreatment(statement, consultation.treatmentEvaluation, 11)
+      statement.setString(14, consultation.id)
     }
 
   private val deleteSql = "delete from consultations where id = ?"
@@ -79,7 +102,8 @@ object ConsultationTable:
 
   private val selectSql =
     """
-      |select c.id, c.case_id, c.emotion, c.status, c.dialogue_count, c.cash_change, c.reputation_change,
+      |select c.id, c.case_id, c.emotion, c.status, c.dialogue_count, c.cash_change, c.reputation_change, c.settled,
+      |       c.closed_day, c.follow_up_completed,
       |       c.treatment_matched, c.treatment_reputation_delta, c.treatment_reason,
       |       p.id as patient_id, p.name as patient_name, p.illness_difficulty,
       |       p.payment_willingness, p.communication_difficulty, p.dispute_risk,
@@ -123,13 +147,21 @@ object ConsultationTable:
       dialogueCount = resultSet.getInt("dialogue_count"),
       treatmentEvaluation = readTreatment(resultSet),
       cashChange = BigDecimal(resultSet.getBigDecimal("cash_change")),
-      reputationChange = resultSet.getDouble("reputation_change")
+      reputationChange = resultSet.getDouble("reputation_change"),
+      settled = resultSet.getBoolean("settled"),
+      closedDay = Option(resultSet.getObject("closed_day")).map(_ => resultSet.getInt("closed_day")),
+      followUpCompleted = resultSet.getBoolean("follow_up_completed")
     )
 
   private def bindOptionalString(statement: java.sql.PreparedStatement, index: Int, value: Option[String]): Unit =
     value match
       case Some(item) => statement.setString(index, item)
       case None => statement.setNull(index, Types.VARCHAR)
+
+  private def bindOptionalInt(statement: java.sql.PreparedStatement, index: Int, value: Option[Int]): Unit =
+    value match
+      case Some(item) => statement.setInt(index, item)
+      case None => statement.setNull(index, Types.INTEGER)
 
   private def readTreatment(resultSet: java.sql.ResultSet): Option[TreatmentEvaluation] =
     Option(resultSet.getObject("treatment_matched")).map(_ =>

@@ -50,6 +50,16 @@ export default function ClinicHomePage() {
       />
       <ClinicHud game={game} isSettlingDay={page.interaction.isSettlingDay} onSettleDay={page.settleDay} />
 
+      {page.interaction.recoveryFollowUp && (
+        <aside role="status" className="pixel-card absolute left-1/2 top-1/2 z-50 w-[min(88vw,28rem)] -translate-x-1/2 -translate-y-1/2 p-5 text-center text-[#174d73] shadow-[5px_5px_0_#092a45]">
+          <p className="text-[0.58rem] tracking-[0.12em] text-[#397ea8]">RECOVERY FOLLOW-UP</p>
+          <h2 className="mt-2 text-sm">{page.interaction.recoveryFollowUp.patientName} 康复回访</h2>
+          <p className="mt-4 text-xs leading-6">“{page.interaction.recoveryFollowUp.message}”</p>
+          <p className="mt-4 text-xs text-[#2c8a58]">声誉 +{page.interaction.recoveryFollowUp.reputationDelta.toFixed(0)}</p>
+          <button type="button" onClick={page.dismissRecoveryFollowUp} className="pixel-button mt-5 px-4 py-2 text-xs">继续接诊</button>
+        </aside>
+      )}
+
       <BottomActionBar activePanel={page.interaction.activePanel} onOpenPanel={page.openPanel} />
 
       <button type="button" onClick={() => setIsSettingsOpen(true)} className="pixel-button absolute bottom-4 left-4 z-50 px-3 py-2 text-[0.65rem] sm:bottom-6 sm:left-6">⚙ 设置</button>
@@ -60,9 +70,13 @@ export default function ClinicHomePage() {
           isPatientPresent={isPatientPresent}
           patientName={page.interaction.conversation?.patient.name ?? null}
           isStartingConsultation={page.interaction.isStartingConsultation}
+          pharmacyOverview={page.interaction.pharmacyOverview}
+          isLoadingPharmacy={page.interaction.isLoadingPharmacy}
+          purchasingMedicineId={page.interaction.purchasingMedicineId}
           error={page.interaction.consultationError}
           onClose={page.closePanel}
           onWelcomePatient={page.welcomePatient}
+          onPurchaseMedicine={page.purchaseMedicine}
         />
       )}
 

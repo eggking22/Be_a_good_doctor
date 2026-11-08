@@ -7,8 +7,10 @@ import services.clinic.objects.Clinic
 import services.clinic.tables.{FacilityTable, StaffTable}
 import services.consultation.objects.{ConsultationSnapshot, ConsultationStatus}
 import services.consultation.tables.{ConsultationTable, PatientCaseTable, PlayerTextAnalysisTable, PrescriptionItemTable}
-import services.economy.objects.CashFlow
+import services.economy.calculators.CashFlowCalculator
+import services.economy.objects.{CashFlow, DailyStatementRecord, LedgerTransaction, LedgerTransactionType}
 import services.economy.tables.{DailyStatementTable, LedgerTable}
+import services.economy.utils.Money
 import services.event.tables.EventTable
 import services.game.objects.{GameSaveSummary, GameSessionRecord, GameState, LoadedGameState}
 import services.game.calculators.{GameClock, GameDayCalculator}
@@ -18,15 +20,18 @@ import services.game.utils.GameIdGenerator
 import services.patient.api.GeneratePatientAPIMessage
 import services.patient.tables.PatientTable
 import services.pharmacy.tables.InventoryTable
+import services.pharmacy.utils.InitialInventory
 import services.reputation.tables.ReputationTable
 import services.system.HttpError
 
 import java.sql.Connection
 import java.time.{Instant, OffsetDateTime}
+import java.util.UUID
 
 object GameStateOperations:
   private val startingCash = BigDecimal(10000)
   private val startingReputation = 60.0
+  private val dailyRentAndUtilities = BigDecimal(100)
 
   private[game] def start(connection: Connection, playerName: String, replaceGameId: Option[String] = None): IO[GameState] =
     val normalizedName = playerName.trim
@@ -36,7 +41,8 @@ object GameStateOperations:
       val normalizedReplacement = replaceGameId.map(_.trim).filter(_.nonEmpty)
       normalizedReplacement.fold(IO.unit)(gameId => GameStateTable.deleteIfExists(connection, gameId)) *>
         GameStateTable.insert(connection, toSessionRecord(state)).flatMap { _ =>
-          generatePatients(connection, state.id, PatientArrivalCalculator.initialPatientCount).map(_ => state)
+          InitialInventory.seed(connection, state.id) *>
+            generatePatients(connection, state.id, PatientArrivalCalculator.initialPatientCount).map(_ => state)
         }
 
   private[game] def get(connection: Connection, gameId: String): IO[GameState] =
@@ -70,9 +76,14 @@ object GameStateOperations:
           dailyStatements <- DailyStatementTable.findByGameId(connection, normalizedGameId)
           ledgerTransactions <- LedgerTable.findByGameId(connection, normalizedGameId)
           baseState = fromSessionRecord(record, clinic, inventory)
+          currentDayTransactions = ledgerTransactions.filter(_.occurredOn == record.currentDay)
+          currentDayCashFlow = CashFlow(
+            income = Money.round(currentDayTransactions.filter(item => LedgerTransactionType.incomeTypes.contains(item.transactionType)).map(_.amount).sum),
+            expense = Money.round(currentDayTransactions.filter(item => LedgerTransactionType.expenseTypes.contains(item.transactionType)).map(_.amount).sum)
+          )
           state = baseState.copy(
             finance = baseState.finance.copy(
-              cashFlow = dailyStatements.lastOption.map(item => CashFlow(item.statement.income, item.statement.expense)),
+              cashFlow = Some(currentDayCashFlow),
               dailyStatement = dailyStatements.lastOption.map(_.statement)
             )
           )
@@ -120,12 +131,52 @@ object GameStateOperations:
           if consultations.exists(_.status == ConsultationStatus.InProgress) then
             IO.raiseError(HttpError.Conflict("仍有进行中的接诊，请先结束当前问诊。"))
           else
-            val nextState = GameDayCalculator.advanceOneDay(state)
-            GameStateTable.update(connection, toSessionRecord(nextState)).flatMap { _ =>
-              generatePatients(connection, nextState.id, PatientArrivalCalculator.dailyPatientCount(nextState.reputation.score)).map(_ => nextState)
+            settleDay(connection, state).flatMap { settledState =>
+              if settledState.bankrupt then
+                GameStateTable.update(connection, toSessionRecord(settledState)).as(settledState)
+              else
+                val nextState = GameDayCalculator.advanceOneDay(settledState)
+                GameStateTable.update(connection, toSessionRecord(nextState)).flatMap { _ =>
+                  generatePatients(connection, nextState.id, PatientArrivalCalculator.dailyPatientCount(nextState.reputation.score)).map(_ => nextState)
+                }
             }
         }
     }
+
+  private def settleDay(connection: Connection, state: GameState): IO[GameState] =
+    val rentTransaction = LedgerTransaction(
+      id = s"ledger-${UUID.randomUUID()}",
+      gameId = state.id,
+      transactionType = LedgerTransactionType.RentAndUtilities,
+      amount = dailyRentAndUtilities,
+      occurredOn = state.currentDay,
+      description = "每日房租水电"
+    )
+    for
+      _ <- LedgerTable.append(connection, rentTransaction)
+      transactions <- LedgerTable.findByGameIdAndDay(connection, state.id, state.currentDay)
+      income = Money.round(transactions.filter(item => LedgerTransactionType.incomeTypes.contains(item.transactionType)).map(_.amount).sum)
+      expense = Money.round(transactions.filter(item => LedgerTransactionType.expenseTypes.contains(item.transactionType)).map(_.amount).sum)
+      // state.finance.cash 已包含今天此前的采购和售药，但尚未扣除本次日结房租水电。
+      openingCash = Money.round(state.finance.cash - income + expense - dailyRentAndUtilities)
+      statement = CashFlowCalculator.settle(openingCash, CashFlow(income, expense))
+      record = DailyStatementRecord(
+        id = s"statement-${UUID.randomUUID()}",
+        gameId = state.id,
+        day = state.currentDay,
+        statement = statement,
+        createdAt = Instant.now().toString
+      )
+      _ <- DailyStatementTable.append(connection, record)
+    yield state.copy(
+      finance = state.finance.copy(
+        cash = statement.closingCash,
+        cashFlow = Some(CashFlow(statement.income, statement.expense)),
+        dailyStatement = Some(statement)
+      ),
+      bankrupt = statement.bankrupt,
+      updatedAt = Instant.now().toString
+    )
 
   private[game] def generatePatients(connection: Connection, gameId: String, count: Int): IO[Unit] =
     List.fill(count.max(0))(()).foldLeft(IO.unit) { (program, _) =>

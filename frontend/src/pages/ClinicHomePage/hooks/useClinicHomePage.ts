@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { GeneratePatientOpeningDialogueAPIMessage } from '@/apis/consultation/GeneratePatientOpeningDialogueAPIMessage'
 import { EndConsultationAPIMessage } from '@/apis/consultation/EndConsultationAPIMessage'
 import { StartConsultationAPIMessage } from '@/apis/consultation/StartConsultationAPIMessage'
 import { SubmitPlayerTextAPIMessage } from '@/apis/consultation/SubmitPlayerTextAPIMessage'
@@ -8,6 +7,9 @@ import { LoadGameAPIMessage } from '@/apis/game/LoadGameAPIMessage'
 import { AdvanceGameDayAPIMessage } from '@/apis/game/AdvanceGameDayAPIMessage'
 import { OpenBusinessDayAPIMessage } from '@/apis/game/OpenBusinessDayAPIMessage'
 import { GeneratePatientAPIMessage } from '@/apis/patient/GeneratePatientAPIMessage'
+import { GetPharmacyOverviewAPIMessage } from '@/apis/pharmacy/GetPharmacyOverviewAPIMessage'
+import { PurchaseMedicineAPIMessage } from '@/apis/pharmacy/PurchaseMedicineAPIMessage'
+import { TryRecoveryFollowUpAPIMessage } from '@/apis/reputation/TryRecoveryFollowUpAPIMessage'
 import type { DialogueMessage } from '@/objects/consultation/DialogueMessage'
 import type { ClinicPanel, ClinicHomeInteractionState, ClinicHomeStatus } from '@/pages/ClinicHomePage/objects/ClinicHomeViewState'
 import { patientPortraits } from '@/pages/ClinicHomePage/objects/PatientPortrait'
@@ -23,6 +25,10 @@ const initialInteractionState: ClinicHomeInteractionState = {
   isSendingText: false,
   isEndingConsultation: false,
   isSettlingDay: false,
+  pharmacyOverview: null,
+  isLoadingPharmacy: false,
+  purchasingMedicineId: null,
+  recoveryFollowUp: null,
   consultationError: null,
 }
 
@@ -92,10 +98,40 @@ export function useClinicHomePage() {
 
   function openPanel(panel: ClinicPanel) {
     setInteraction((current) => ({ ...current, activePanel: panel }))
+    if (panel === 'pharmacy' && status.status === 'ready') {
+      void loadPharmacy(status.game.id)
+    }
   }
 
   function closePanel() {
     setInteraction((current) => ({ ...current, activePanel: null }))
+  }
+
+  async function loadPharmacy(gameId: string) {
+    setInteraction((current) => ({ ...current, isLoadingPharmacy: true, consultationError: null }))
+    try {
+      const pharmacyOverview = await sendAPI(new GetPharmacyOverviewAPIMessage(gameId))
+      setInteraction((current) => ({ ...current, pharmacyOverview, isLoadingPharmacy: false }))
+    } catch (error) {
+      setInteraction((current) => ({ ...current, isLoadingPharmacy: false, consultationError: messageOf(error) }))
+    }
+  }
+
+  async function purchaseMedicine(medicineId: string) {
+    const gameId = status.status === 'ready' ? status.game.id : null
+    if (!gameId || interaction.purchasingMedicineId) {
+      return
+    }
+
+    setInteraction((current) => ({ ...current, purchasingMedicineId: medicineId, consultationError: null }))
+    try {
+      const pharmacyOverview = await sendAPI(new PurchaseMedicineAPIMessage(gameId, medicineId, 1))
+      const loadedGame = await sendAPI(new LoadGameAPIMessage(gameId))
+      setStatus({ status: 'ready', game: loadedGame.state })
+      setInteraction((current) => ({ ...current, pharmacyOverview, purchasingMedicineId: null }))
+    } catch (error) {
+      setInteraction((current) => ({ ...current, purchasingMedicineId: null, consultationError: messageOf(error) }))
+    }
   }
 
   async function welcomePatient() {
@@ -115,17 +151,29 @@ export function useClinicHomePage() {
     }))
 
     try {
+      const recoveryFollowUp = await sendAPI(new TryRecoveryFollowUpAPIMessage(gameId))
+      if (recoveryFollowUp) {
+        const loadedGame = await sendAPI(new LoadGameAPIMessage(gameId))
+        setStatus({ status: 'ready', game: loadedGame.state })
+        setInteraction((current) => ({
+          ...current,
+          patientStage: 'outside',
+          patientPortrait: null,
+          isStartingConsultation: false,
+          recoveryFollowUp,
+        }))
+        return
+      }
       const openedGame = await sendAPI(new OpenBusinessDayAPIMessage(gameId))
       setStatus({ status: 'ready', game: openedGame })
       const patient = await sendAPI(new GeneratePatientAPIMessage(gameId))
       const started = await sendAPI(new StartConsultationAPIMessage(gameId, patient.id))
-      const opening = await sendAPI(new GeneratePatientOpeningDialogueAPIMessage(started.consultationId))
       setInteraction((current) => ({
         ...current,
         conversation: {
           consultationId: started.consultationId,
           patient: started.patient,
-          messages: [opening.patientMessage],
+          messages: [started.opening.patientMessage],
           latestAnalysis: null,
           shoppingList: [],
           endReason: null,
@@ -225,8 +273,16 @@ export function useClinicHomePage() {
       isSendingText: false,
       isEndingConsultation: false,
       isSettlingDay: false,
+      pharmacyOverview: null,
+      isLoadingPharmacy: false,
+      purchasingMedicineId: null,
+      recoveryFollowUp: null,
       consultationError: null,
     }))
+  }
+
+  function dismissRecoveryFollowUp() {
+    setInteraction((current) => ({ ...current, recoveryFollowUp: null }))
   }
 
   async function settleDay() {
@@ -249,10 +305,12 @@ export function useClinicHomePage() {
     interaction,
     openPanel,
     closePanel,
+    purchaseMedicine,
     welcomePatient,
     submitPlayerText,
     finishConsultation,
     dismissEndedConsultation,
+    dismissRecoveryFollowUp,
     settleDay,
     retryGame: loadGame,
   }

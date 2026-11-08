@@ -7,7 +7,7 @@ import type { PrescriptionItem } from '@/objects/consultation/PrescriptionItem'
 export interface EndConsultationResponse {
   playerMessage: DialogueMessage
   patientMessage: DialogueMessage
-  analysis: PlayerTextAnalysis
+  analysis: PlayerTextAnalysis | null
   status: ConsultationStatus
   endReason: ConsultationEndReason
   shoppingList: PrescriptionItem[]

@@ -9,7 +9,7 @@ import services.ai.api.GeneratePatientDialogueAPIMessage
 import services.consultation.objects.{Consultation, ConsultationEndReason, ConsultationStatus, DialogueMessage, PatientConversationAction}
 import services.consultation.objects.apiTypes.PlayerTextDialogueResponse
 import services.consultation.tables.{CaseSymptomTable, ConsultationTable, DialogueMessageTable, PatientCaseTable, PlayerTextAnalysisTable, PrescriptionItemTable}
-import services.consultation.utils.{ConversationEndDetector, DialogueAIContextBuilder, DialogueAIResultValidator, MedicineNameMatcher, SymptomRevealSelector}
+import services.consultation.utils.{ConsultationSettlement, ConversationEndDetector, DialogueAIContextBuilder, DialogueAIResultValidator, MedicineNameMatcher, SymptomRevealSelector}
 import services.game.calculators.GameClock
 import services.game.tables.GameStateTable
 import services.pharmacy.tables.MedicineTable
@@ -109,6 +109,7 @@ final case class SubmitPlayerTextAPIMessage(
         updatedAt = OffsetDateTime.now()
       )
       _ <- GameStateTable.update(connection, advancedGame)
+      _ <- if status == ConsultationStatus.Completed then ConsultationSettlement.settleIfNeeded(connection, consultation.id) else IO.unit
       shoppingList <- PrescriptionItemTable.findByConsultationId(connection, consultation.id)
     yield PlayerTextDialogueResponse(
       playerMessage = playerMessage,

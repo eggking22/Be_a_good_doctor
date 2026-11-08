@@ -16,4 +16,7 @@ export interface Consultation {
   treatmentEvaluation: TreatmentEvaluation | null
   cashChange: number
   reputationChange: number
+  settled: boolean
+  closedDay: number | null
+  followUpCompleted: boolean
 }

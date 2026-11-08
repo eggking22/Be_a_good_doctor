@@ -16,5 +16,6 @@ object GameDayCalculator:
     state.copy(
       currentDay = state.currentDay + 1,
       currentMinute = GameClock.preparationStartMinute,
+      finance = state.finance.copy(cashFlow = None),
       updatedAt = Instant.now().toString
     )
