@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+
 import BottomActionBar from '@/pages/ClinicHomePage/components/BottomActionBar'
 import ClinicHud from '@/pages/ClinicHomePage/components/ClinicHud'
 import ClinicRoomScene from '@/pages/ClinicHomePage/components/ClinicRoomScene'
@@ -7,6 +10,8 @@ import { useClinicHomePage } from '@/pages/ClinicHomePage/hooks/useClinicHomePag
 
 export default function ClinicHomePage() {
   const page = useClinicHomePage()
+  const navigate = useNavigate()
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   if (page.status.status === 'loading') {
     return <div className="pixel-font flex min-h-screen items-center justify-center bg-[#123b5f] p-6 text-center text-[#effaff]">正在连接诊所系统…</div>
@@ -16,12 +21,13 @@ export default function ClinicHomePage() {
     return (
       <div className="pixel-font flex min-h-screen flex-col items-center justify-center gap-4 bg-[#123b5f] p-6 text-center text-[#effaff]">
         <p>{page.status.message}</p>
-        <button type="button" onClick={page.retryGame} className="pixel-button px-5 py-3 text-xs">重新连接</button>
+        {page.status.status === 'error' && <button type="button" onClick={page.retryGame} className="pixel-button px-5 py-3 text-xs">重新连接</button>}
+        <button type="button" onClick={() => navigate('/')} className="pixel-button px-5 py-3 text-xs">返回主菜单</button>
       </div>
     )
   }
 
-  const { game, season, gameTime, isOpen } = page.status
+  const { game } = page.status
   const isPatientPresent = page.interaction.patientStage === 'entering' || page.interaction.patientStage === 'consulting'
 
   return (
@@ -42,9 +48,11 @@ export default function ClinicHomePage() {
         onFinishConsultation={page.finishConsultation}
         onDismissEndedConsultation={page.dismissEndedConsultation}
       />
-      <ClinicHud game={game} season={season} gameTime={gameTime} isOpen={isOpen} />
+      <ClinicHud game={game} isSettlingDay={page.interaction.isSettlingDay} onSettleDay={page.settleDay} />
 
       <BottomActionBar activePanel={page.interaction.activePanel} onOpenPanel={page.openPanel} />
+
+      <button type="button" onClick={() => setIsSettingsOpen(true)} className="pixel-button absolute bottom-4 left-4 z-50 px-3 py-2 text-[0.65rem] sm:bottom-6 sm:left-6">⚙ 设置</button>
 
       {page.interaction.activePanel && (
         <ClinicSidePanel
@@ -56,6 +64,17 @@ export default function ClinicHomePage() {
           onClose={page.closePanel}
           onWelcomePatient={page.welcomePatient}
         />
+      )}
+
+      {isSettingsOpen && (
+        <aside className="pixel-drawer absolute inset-y-0 left-0 z-[60] flex w-full max-w-xs flex-col p-5 text-[#123b5f] sm:p-7">
+          <div className="flex items-start justify-between gap-4">
+            <div><p className="text-[0.58rem] tracking-[0.16em] text-[#3d83ae]">CLINIC SETTINGS</p><h2 className="mt-2 text-xl">诊所设置</h2></div>
+            <button type="button" aria-label="关闭设置" onClick={() => setIsSettingsOpen(false)} className="pixel-button px-3 py-1 text-base leading-none">×</button>
+          </div>
+          <div className="pixel-card mt-8 p-4 text-xs leading-6 text-[#275c7f]">当前操作都会即时写入数据库。退出到主菜单只离开诊室，不会删除或重置存档。</div>
+          <button type="button" onClick={() => navigate('/')} className="pixel-button mt-5 px-4 py-3 text-xs">退出到主菜单</button>
+        </aside>
       )}
     </div>
   )

@@ -4,13 +4,15 @@ import { GeneratePatientOpeningDialogueAPIMessage } from '@/apis/consultation/Ge
 import { EndConsultationAPIMessage } from '@/apis/consultation/EndConsultationAPIMessage'
 import { StartConsultationAPIMessage } from '@/apis/consultation/StartConsultationAPIMessage'
 import { SubmitPlayerTextAPIMessage } from '@/apis/consultation/SubmitPlayerTextAPIMessage'
-import { GetGameStateAPIMessage } from '@/apis/game/GetGameStateAPIMessage'
-import { StartGameAPIMessage } from '@/apis/game/StartGameAPIMessage'
+import { LoadGameAPIMessage } from '@/apis/game/LoadGameAPIMessage'
+import { AdvanceGameDayAPIMessage } from '@/apis/game/AdvanceGameDayAPIMessage'
+import { OpenBusinessDayAPIMessage } from '@/apis/game/OpenBusinessDayAPIMessage'
 import { GeneratePatientAPIMessage } from '@/apis/patient/GeneratePatientAPIMessage'
 import type { DialogueMessage } from '@/objects/consultation/DialogueMessage'
 import type { ClinicPanel, ClinicHomeInteractionState, ClinicHomeStatus } from '@/pages/ClinicHomePage/objects/ClinicHomeViewState'
 import { patientPortraits } from '@/pages/ClinicHomePage/objects/PatientPortrait'
 import { sendAPI } from '@/system/api/sendAPI'
+import { clearCurrentGameId, getCurrentGameId } from '@/system/game/currentGameStorage'
 
 const initialInteractionState: ClinicHomeInteractionState = {
   activePanel: null,
@@ -20,10 +22,9 @@ const initialInteractionState: ClinicHomeInteractionState = {
   isStartingConsultation: false,
   isSendingText: false,
   isEndingConsultation: false,
+  isSettlingDay: false,
   consultationError: null,
 }
-
-const gameStorageKey = 'ai-clinic-simulation.current-game-id'
 
 export function useClinicHomePage() {
   const [status, setStatus] = useState<ClinicHomeStatus>({ status: 'loading' })
@@ -60,17 +61,32 @@ export function useClinicHomePage() {
   async function loadGame() {
     setStatus({ status: 'loading' })
     try {
-      const storedGameId = sessionStorage.getItem(gameStorageKey)
-      const game = storedGameId
-        ? await sendAPI(new GetGameStateAPIMessage(storedGameId)).catch(async () => {
-            sessionStorage.removeItem(gameStorageKey)
-            return sendAPI(new StartGameAPIMessage('医生'))
-          })
-        : await sendAPI(new StartGameAPIMessage('医生'))
-      sessionStorage.setItem(gameStorageKey, game.id)
-      setStatus({ status: 'ready', game, season: '春季', gameTime: '08:30', isOpen: true })
+      const storedGameId = getCurrentGameId()
+      if (!storedGameId) {
+        setStatus({ status: 'empty', message: '尚未选择存档，请先从主菜单载入或创建一局游戏。' })
+        return
+      }
+      const loadedGame = await sendAPI(new LoadGameAPIMessage(storedGameId))
+      const activeConsultation = loadedGame.consultationSnapshots.find((snapshot) => snapshot.consultation.status === 'InProgress')
+      if (activeConsultation) {
+        setInteraction((current) => ({
+          ...current,
+          patientStage: 'consulting',
+          patientPortrait: patientPortraits[0],
+          conversation: {
+            consultationId: activeConsultation.consultation.id,
+            patient: activeConsultation.consultation.patient,
+            messages: activeConsultation.consultation.dialogueHistory,
+            latestAnalysis: activeConsultation.playerTextAnalyses.at(-1) ?? null,
+            shoppingList: activeConsultation.prescriptionItems,
+            endReason: null,
+          },
+        }))
+      }
+      setStatus({ status: 'ready', game: loadedGame.state })
     } catch (error) {
-      setStatus({ status: 'error', message: messageOf(error) })
+      clearCurrentGameId()
+      setStatus({ status: 'empty', message: `存档不可读取：${messageOf(error)}` })
     }
   }
 
@@ -86,6 +102,7 @@ export function useClinicHomePage() {
     if (status.status !== 'ready' || interaction.patientStage !== 'outside' || interaction.isStartingConsultation) {
       return
     }
+    const gameId = status.game.id
 
     const portrait = patientPortraits[Math.floor(Math.random() * patientPortraits.length)]
     setInteraction((current) => ({
@@ -98,8 +115,10 @@ export function useClinicHomePage() {
     }))
 
     try {
-      const patient = await sendAPI(new GeneratePatientAPIMessage(status.game.id))
-      const started = await sendAPI(new StartConsultationAPIMessage(status.game.id, patient.id))
+      const openedGame = await sendAPI(new OpenBusinessDayAPIMessage(gameId))
+      setStatus({ status: 'ready', game: openedGame })
+      const patient = await sendAPI(new GeneratePatientAPIMessage(gameId))
+      const started = await sendAPI(new StartConsultationAPIMessage(gameId, patient.id))
       const opening = await sendAPI(new GeneratePatientOpeningDialogueAPIMessage(started.consultationId))
       setInteraction((current) => ({
         ...current,
@@ -129,13 +148,16 @@ export function useClinicHomePage() {
   async function submitPlayerText(text: string) {
     const normalizedText = text.trim()
     const conversation = interaction.conversation
-    if (!normalizedText || !conversation || interaction.isSendingText || interaction.isEndingConsultation || interaction.patientStage !== 'consulting') {
+    const gameId = status.status === 'ready' ? status.game.id : null
+    if (!normalizedText || !conversation || !gameId || interaction.isSendingText || interaction.isEndingConsultation || interaction.patientStage !== 'consulting') {
       return
     }
 
     setInteraction((current) => ({ ...current, isSendingText: true, consultationError: null }))
     try {
       const reply = await sendAPI(new SubmitPlayerTextAPIMessage(conversation.consultationId, normalizedText))
+      const loadedGame = await sendAPI(new LoadGameAPIMessage(gameId))
+      setStatus({ status: 'ready', game: loadedGame.state })
       setInteraction((current) => {
         if (!current.conversation || current.conversation.consultationId !== conversation.consultationId) {
           return current
@@ -160,13 +182,16 @@ export function useClinicHomePage() {
 
   async function finishConsultation() {
     const conversation = interaction.conversation
-    if (!conversation || interaction.isEndingConsultation || interaction.patientStage !== 'consulting') {
+    const gameId = status.status === 'ready' ? status.game.id : null
+    if (!conversation || !gameId || interaction.isEndingConsultation || interaction.patientStage !== 'consulting') {
       return
     }
 
     setInteraction((current) => ({ ...current, isEndingConsultation: true, consultationError: null }))
     try {
       const ended = await sendAPI(new EndConsultationAPIMessage(conversation.consultationId))
+      const loadedGame = await sendAPI(new LoadGameAPIMessage(gameId))
+      setStatus({ status: 'ready', game: loadedGame.state })
       setInteraction((current) => {
         if (!current.conversation || current.conversation.consultationId !== conversation.consultationId) {
           return current
@@ -199,8 +224,24 @@ export function useClinicHomePage() {
       isStartingConsultation: false,
       isSendingText: false,
       isEndingConsultation: false,
+      isSettlingDay: false,
       consultationError: null,
     }))
+  }
+
+  async function settleDay() {
+    if (status.status !== 'ready' || interaction.isSettlingDay) {
+      return
+    }
+
+    setInteraction((current) => ({ ...current, isSettlingDay: true, consultationError: null }))
+    try {
+      const nextGame = await sendAPI(new AdvanceGameDayAPIMessage(status.game.id))
+      setStatus({ status: 'ready', game: nextGame })
+      setInteraction(initialInteractionState)
+    } catch (error) {
+      setInteraction((current) => ({ ...current, isSettlingDay: false, consultationError: messageOf(error) }))
+    }
   }
 
   return {
@@ -212,6 +253,7 @@ export function useClinicHomePage() {
     submitPlayerText,
     finishConsultation,
     dismissEndedConsultation,
+    settleDay,
     retryGame: loadGame,
   }
 }

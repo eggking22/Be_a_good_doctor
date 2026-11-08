@@ -10,10 +10,10 @@ import services.system.api.APIMessage
 
 import java.sql.Connection
 
-final case class StartGameAPIMessage(playerName: String) extends APIMessage[GameState]:
+final case class StartGameAPIMessage(playerName: String, replaceGameId: Option[String] = None) extends APIMessage[GameState]:
   override def plan(connection: Connection): IO[GameState] =
-    GameStateOperations.start(connection, playerName)
+    GameStateOperations.start(connection, playerName, replaceGameId)
 
 object StartGameAPIMessage:
-  // 请求体 JSON：{"playerName":"玩家"}。
+  // 请求体 JSON：{"playerName":"玩家","replaceGameId":"旧存档 ID（可选）"}。
   given Codec.AsObject[StartGameAPIMessage] = deriveCodec

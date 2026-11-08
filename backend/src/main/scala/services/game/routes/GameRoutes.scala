@@ -2,7 +2,8 @@
 package services.game.routes
 
 import io.circe.generic.auto.*
-import services.game.api.{AdvanceGameDayAPIMessage, DeleteGameAPIMessage, GetGameStateAPIMessage, StartGameAPIMessage}
+import services.game.api.{AdvanceGameDayAPIMessage, DeleteGameAPIMessage, GetGameStateAPIMessage, ListGameSavesAPIMessage, LoadGameAPIMessage, OpenBusinessDayAPIMessage, StartGameAPIMessage}
+import services.game.objects.{GameSaveSummary, LoadedGameState}
 import services.game.objects.apiTypes.DeleteGameResponse
 import services.system.api.ApiServiceMessages
 import services.system.api.RegisteredAPIMessage
@@ -14,6 +15,9 @@ object GameRoutes:
     List(
       RegisteredAPIMessage.api[StartGameAPIMessage, services.game.objects.GameState],
       RegisteredAPIMessage.query[GetGameStateAPIMessage, services.game.objects.GameState],
+      RegisteredAPIMessage.query[ListGameSavesAPIMessage, List[GameSaveSummary]],
+      RegisteredAPIMessage.query[LoadGameAPIMessage, LoadedGameState],
+      RegisteredAPIMessage.api[OpenBusinessDayAPIMessage, services.game.objects.GameState],
       RegisteredAPIMessage.api[AdvanceGameDayAPIMessage, services.game.objects.GameState],
       RegisteredAPIMessage.api[DeleteGameAPIMessage, DeleteGameResponse]
     )

@@ -12,6 +12,7 @@ final case class GameState(
     id: String,
     playerName: String,
     currentDay: Int,
+    currentMinute: Int,
     finance: FinanceState,
     reputation: Reputation,
     clinic: Clinic,

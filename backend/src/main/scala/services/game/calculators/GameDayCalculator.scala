@@ -15,5 +15,6 @@ object GameDayCalculator:
   private[game] def advanceOneDay(state: GameState): GameState =
     state.copy(
       currentDay = state.currentDay + 1,
+      currentMinute = GameClock.preparationStartMinute,
       updatedAt = Instant.now().toString
     )

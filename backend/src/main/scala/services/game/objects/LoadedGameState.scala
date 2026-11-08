@@ -3,7 +3,7 @@ package services.game.objects
 
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
-import services.consultation.objects.Consultation
+import services.consultation.objects.{Consultation, ConsultationSnapshot, PatientCase}
 import services.economy.objects.{DailyStatementRecord, LedgerTransaction}
 import services.event.objects.GameEvent
 import services.patient.objects.Patient
@@ -12,7 +12,9 @@ import services.reputation.objects.ReputationChange
 final case class LoadedGameState(
     state: GameState,
     patients: List[Patient],
+    patientCases: List[PatientCase],
     consultations: List[Consultation],
+    consultationSnapshots: List[ConsultationSnapshot],
     events: List[GameEvent],
     reputationHistory: List[ReputationChange],
     dailyStatements: List[DailyStatementRecord],

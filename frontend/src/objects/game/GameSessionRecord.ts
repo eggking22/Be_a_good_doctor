@@ -4,6 +4,7 @@ export interface GameSessionRecord {
   id: string
   playerName: string
   currentDay: number
+  currentMinute: number
   cash: number
   reputationScore: number
   bankrupt: boolean

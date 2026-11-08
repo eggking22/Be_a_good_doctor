@@ -38,6 +38,11 @@ object ConsultationTable:
   def findById(connection: Connection, consultationId: String): IO[Option[Consultation]] =
     baseQuery(connection, findByIdSql)(_.setString(1, consultationId)).flatMap(_.headOption.traverse(enrichWithDialogue(connection)))
 
+  private val findGameIdByIdSql = "select game_id from consultations where id = ?"
+
+  def findGameIdById(connection: Connection, consultationId: String): IO[Option[String]] =
+    JdbcSupport.queryOne(connection, findGameIdByIdSql)(_.setString(1, consultationId))(_.getString("game_id"))
+
   private val findByGameIdSql = "where c.game_id = ? order by c.id"
 
   def findByGameId(connection: Connection, gameId: String): IO[List[Consultation]] =

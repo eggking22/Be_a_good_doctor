@@ -5,6 +5,7 @@ import cats.effect.IO
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import services.game.tables.GameStateTable
+import services.game.calculators.GameClock
 import services.patient.calculators.PatientGenerator
 import services.patient.objects.Patient
 import services.patient.tables.PatientTable
@@ -20,8 +21,11 @@ final case class GeneratePatientAPIMessage(gameId: String) extends APIMessage[Pa
     else
       GameStateTable.findById(connection, normalizedGameId).flatMap {
         case Some(game) =>
-          val patient = PatientGenerator.generate(game.reputationScore)
-          PatientTable.create(connection, normalizedGameId, patient).map(_ => patient)
+          if GameClock.hasBusinessEnded(game.currentMinute) then
+            IO.raiseError(HttpError.Conflict("今日营业已经结束，不能再生成新患者。"))
+          else
+            val patient = PatientGenerator.generate(game.reputationScore)
+            PatientTable.create(connection, normalizedGameId, patient).map(_ => patient)
         case None => IO.raiseError(HttpError.NotFound(s"未找到游戏：$normalizedGameId"))
       }
 

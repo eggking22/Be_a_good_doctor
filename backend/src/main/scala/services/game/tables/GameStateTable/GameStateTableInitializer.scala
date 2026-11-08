@@ -13,12 +13,16 @@ object GameStateTableInitializer:
       |  id varchar(80) primary key,
       |  player_name varchar(120) not null,
       |  current_day integer not null,
+      |  current_minute integer not null default 510 check (current_minute between 0 and 1440),
       |  cash numeric(14, 2) not null,
       |  reputation double precision not null,
       |  bankrupt boolean not null default false,
       |  created_at timestamptz not null,
       |  updated_at timestamptz not null
-      |)
+      |);
+      |alter table game_sessions add column if not exists current_minute integer;
+      |update game_sessions set current_minute = 510 where current_minute is null;
+      |alter table game_sessions alter column current_minute set not null;
       |""".stripMargin
 
   def initialize(connection: Connection): IO[Unit] =

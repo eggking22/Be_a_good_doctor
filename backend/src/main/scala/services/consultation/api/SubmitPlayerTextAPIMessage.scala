@@ -10,6 +10,8 @@ import services.consultation.objects.{Consultation, ConsultationEndReason, Consu
 import services.consultation.objects.apiTypes.PlayerTextDialogueResponse
 import services.consultation.tables.{CaseSymptomTable, ConsultationTable, DialogueMessageTable, PatientCaseTable, PlayerTextAnalysisTable, PrescriptionItemTable}
 import services.consultation.utils.{ConversationEndDetector, DialogueAIContextBuilder, DialogueAIResultValidator, MedicineNameMatcher, SymptomRevealSelector}
+import services.game.calculators.GameClock
+import services.game.tables.GameStateTable
 import services.pharmacy.tables.MedicineTable
 import services.system.HttpError
 import services.system.api.APIMessage
@@ -94,6 +96,19 @@ final case class SubmitPlayerTextAPIMessage(
       status = if endReason.nonEmpty then ConsultationStatus.Completed else ConsultationStatus.InProgress
       updated = consultation.copy(status = status, dialogueCount = consultation.dialogueCount + 2)
       _ <- ConsultationTable.update(connection, updated)
+      gameId <- ConsultationTable.findGameIdById(connection, consultation.id).flatMap {
+        case Some(value) => IO.pure(value)
+        case None => IO.raiseError(HttpError.NotFound(s"未找到接诊所属游戏：${consultation.id}"))
+      }
+      game <- GameStateTable.findById(connection, gameId).flatMap {
+        case Some(value) => IO.pure(value)
+        case None => IO.raiseError(HttpError.NotFound(s"未找到游戏：$gameId"))
+      }
+      advancedGame = game.copy(
+        currentMinute = GameClock.advanceDialogueMinute(game.currentMinute),
+        updatedAt = OffsetDateTime.now()
+      )
+      _ <- GameStateTable.update(connection, advancedGame)
       shoppingList <- PrescriptionItemTable.findByConsultationId(connection, consultation.id)
     yield PlayerTextDialogueResponse(
       playerMessage = playerMessage,

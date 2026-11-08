@@ -7,6 +7,7 @@ export interface GameState {
   id: string
   playerName: string
   currentDay: number
+  currentMinute: number
   finance: FinanceState
   reputation: Reputation
   clinic: Clinic

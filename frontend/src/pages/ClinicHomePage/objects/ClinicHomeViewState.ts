@@ -9,7 +9,7 @@ export type PatientStage = 'outside' | 'entering' | 'consulting' | 'ended'
 
 export type ClinicHomeStatus =
   | { status: 'loading' }
-  | { status: 'ready'; game: GameState; season: string; gameTime: string; isOpen: boolean }
+  | { status: 'ready'; game: GameState }
   | { status: 'empty'; message: string }
   | { status: 'error'; message: string }
 
@@ -21,5 +21,6 @@ export interface ClinicHomeInteractionState {
   isStartingConsultation: boolean
   isSendingText: boolean
   isEndingConsultation: boolean
+  isSettlingDay: boolean
   consultationError: string | null
 }

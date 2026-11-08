@@ -1,11 +1,12 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import ClinicHomePage from '@/pages/ClinicHomePage'
+import MainMenuPage from '@/pages/MainMenuPage'
 
 const routes = [
   {
     path: '/',
-    element: <Navigate replace to="/game" />,
+    element: <MainMenuPage />,
   },
   {
     path: '/game',
@@ -13,7 +14,7 @@ const routes = [
   },
   {
     path: '*',
-    element: <Navigate replace to="/game" />,
+    element: <Navigate replace to="/" />,
   },
 ]
 

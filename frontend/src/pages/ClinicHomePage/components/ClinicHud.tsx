@@ -1,18 +1,22 @@
 import type { GameState } from '@/objects/game/GameState'
+import { calendarForDay, formatGameTime, hasBusinessEnded, hasBusinessStarted } from '@/objects/game/GameCalendar'
 
 interface ClinicHudProps {
   game: GameState
-  season: string
-  gameTime: string
-  isOpen: boolean
+  isSettlingDay: boolean
+  onSettleDay: () => Promise<void>
 }
 
 function formatMoney(value: number): string {
   return `¥${value.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`
 }
 
-export default function ClinicHud({ game, season, gameTime, isOpen }: ClinicHudProps) {
+export default function ClinicHud({ game, isSettlingDay, onSettleDay }: ClinicHudProps) {
   const reputation = Math.max(0, Math.min(100, game.reputation.score))
+  const calendar = calendarForDay(game.currentDay)
+  const businessEnded = hasBusinessEnded(game.currentMinute)
+  const businessStarted = hasBusinessStarted(game.currentMinute)
+  const businessLabel = businessEnded ? '营业结束' : businessStarted ? '正在营业' : '营业准备'
 
   return (
     <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-4 p-4 sm:p-6">
@@ -48,12 +52,13 @@ export default function ClinicHud({ game, season, gameTime, isOpen }: ClinicHudP
       </section>
 
       <section className="pixel-dark-panel pointer-events-auto px-3 py-3 text-right text-[#f3fbff] sm:px-4">
-        <p className="text-[0.6rem] tracking-[0.08em] text-[#a9e4ff]">{season} · 春风营业日</p>
-        <p className="mt-2 text-xl leading-none sm:text-2xl">{gameTime}</p>
+          <p className="text-[0.6rem] tracking-[0.08em] text-[#a9e4ff]">第 {calendar.year} 年 · {calendar.season}第 {calendar.weekOfSeason} 周 · {calendar.weekday}</p>
+          <p className="mt-2 text-xl leading-none sm:text-2xl">{formatGameTime(game.currentMinute)}</p>
         <div className="mt-3 flex items-center justify-end gap-2 text-[0.62rem]">
-          <span className={`h-2.5 w-2.5 border border-[#dff8ff] ${isOpen ? 'bg-[#67e1a9] shadow-[2px_2px_0_#1a9463]' : 'bg-[#f18b83] shadow-[2px_2px_0_#9d3a46]'}`} />
-          {isOpen ? '正在营业' : '准备营业'}
+          <span className={`h-2.5 w-2.5 border border-[#dff8ff] ${businessEnded ? 'bg-[#f18b83] shadow-[2px_2px_0_#9d3a46]' : businessStarted ? 'bg-[#67e1a9] shadow-[2px_2px_0_#1a9463]' : 'bg-[#f5d66a] shadow-[2px_2px_0_#a17b2f]'}`} />
+          {businessLabel}
         </div>
+          {businessEnded && <button type="button" onClick={() => void onSettleDay()} disabled={isSettlingDay} className="pixel-button mt-3 w-full px-2 py-2 text-[0.58rem] disabled:cursor-not-allowed disabled:opacity-60">{isSettlingDay ? '正在结算…' : '营业结束 · 点击结算'}</button>}
       </section>
     </header>
   )

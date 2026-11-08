@@ -11,6 +11,7 @@ import services.consultation.objects.apiTypes.StartConsultationResponse
 import services.consultation.tables.{CaseSymptomTable, ConsultationTable, PatientCaseTable}
 import services.consultation.utils.{ConsultationIdGenerator, PatientCaseIdGenerator}
 import services.game.tables.GameStateTable
+import services.game.calculators.GameClock
 import services.patient.tables.PatientTable
 import services.pharmacy.tables.{DiseaseSymptomTable, DiseaseTable}
 import services.system.HttpError
@@ -30,10 +31,13 @@ final case class StartConsultationAPIMessage(
       IO.raiseError(HttpError.BadRequest("游戏 ID 和患者 ID 不能为空。"))
     else
       for
-        _ <- GameStateTable.findById(connection, normalizedGameId).flatMap {
-          case Some(_) => IO.unit
+        game <- GameStateTable.findById(connection, normalizedGameId).flatMap {
+          case Some(value) => IO.pure(value)
           case None => IO.raiseError(HttpError.NotFound(s"未找到游戏：$normalizedGameId"))
         }
+        _ <- if GameClock.hasBusinessEnded(game.currentMinute) then
+          IO.raiseError(HttpError.Conflict("今日营业已经结束，请完成日结算后再接诊。"))
+        else IO.unit
         patient <- PatientTable.findByGameIdAndId(connection, normalizedGameId, normalizedPatientId).flatMap {
           case Some(value) => IO.pure(value)
           case None => IO.raiseError(HttpError.NotFound(s"未找到属于该游戏的患者：$normalizedPatientId"))
