@@ -14,7 +14,8 @@ final case class Consultation(
     dialogueCount: Int,
     treatmentEvaluation: Option[TreatmentEvaluation],
     cashChange: BigDecimal,
-    reputationChange: Double
+    reputationChange: Double,
+    caseId: Option[String] = None
 )
 
 object Consultation:

@@ -18,7 +18,7 @@ import services.game.objects.{GameSessionRecord, GameState}
 import services.game.tables.GameStateTable
 import services.patient.objects.{Patient, PatientAttributes, PatientEmotion}
 import services.patient.tables.PatientTable
-import services.pharmacy.objects.{InventoryItem, Medicine}
+import services.pharmacy.objects.{InventoryItem, Medicine, MedicinePrice}
 import services.pharmacy.tables.{InventoryTable, MedicineTable}
 import services.reputation.objects.ReputationChange
 import services.reputation.tables.ReputationTable
@@ -44,13 +44,13 @@ final class Stage2PersistenceSuite extends CatsEffectSuite:
           initialLoaded <- GameStateOperations.loadComplete(connection, game.id)
           _ = assertEquals(initialLoaded.state.clinic.employees, Nil)
           _ = assertEquals(initialLoaded.state.inventory.items, Nil)
-          _ = assertEquals(initialLoaded.patients, Nil)
+          _ = assertEquals(initialLoaded.patients.size, 1)
           _ = assertEquals(initialLoaded.consultations, Nil)
           staff = Staff(s"staff-${game.id}", "测试保安", StaffRole.SecurityGuard, BigDecimal(180), 20, 40, 70, true)
           facility = Facility(s"facility-${game.id}", "接待区", 1, BigDecimal(0), 0)
-          medicine = Medicine(s"medicine-${game.id}", "测试药品", BigDecimal(10), BigDecimal(20))
+          medicine = Medicine(s"medicine-${game.id}", "测试药品", MedicinePrice(BigDecimal(10), BigDecimal(20)))
           inventoryItem = InventoryItem(s"inventory-${game.id}", medicine, 12, "2030-01-01")
-          patient = Patient(s"patient-${game.id}", "测试患者", PatientAttributes(3, 4, 2, 0.2))
+          patient = Patient(s"patient-${game.id}", "测试患者", PatientAttributes(3, 4, 2, 0.2), PatientEmotion.Calm)
           consultation = Consultation(
             id = s"consultation-${game.id}",
             patient = patient,
@@ -82,7 +82,8 @@ final class Stage2PersistenceSuite extends CatsEffectSuite:
           _ = assertEquals(loaded.state.clinic.employees.map(_.id), List(staff.id))
           _ = assertEquals(loaded.state.clinic.facilities.map(_.id), List(facility.id))
           _ = assertEquals(loaded.state.inventory.items.map(_.id), List(inventoryItem.id))
-          _ = assertEquals(loaded.patients.map(_.id), List(patient.id))
+          _ = assertEquals(loaded.patients.size, 2)
+          _ = assert(loaded.patients.exists(_.id == patient.id))
           _ = assertEquals(loaded.consultations.head.dialogueHistory.size, 1)
           _ = assertEquals(loaded.events.map(_.id), List(event.id))
           _ = assertEquals(loaded.reputationHistory.size, 1)
@@ -92,7 +93,7 @@ final class Stage2PersistenceSuite extends CatsEffectSuite:
           changedFacility = facility.copy(level = 2)
           changedEvent = event.copy(resolved = true)
           changedPatient = patient.copy(name = "修改后的患者")
-          changedMedicine = medicine.copy(salePrice = BigDecimal(25))
+          changedMedicine = medicine.copy(price = medicine.price.copy(salePrice = BigDecimal(25)))
           changedInventory = inventoryItem.copy(quantity = 5)
           changedConsultation = consultation.copy(status = ConsultationStatus.Completed, dialogueCount = 2)
           _ <- StaffTable.update(connection, changedStaff)
@@ -112,13 +113,13 @@ final class Stage2PersistenceSuite extends CatsEffectSuite:
           _ = assertEquals(readStaff.map(_.satisfaction), Some(90.0))
           _ = assertEquals(readEvent.map(_.resolved), Some(true))
           _ = assertEquals(readPatient.map(_.name), Some("修改后的患者"))
-          _ = assertEquals(readMedicine.map(_.salePrice), Some(BigDecimal(25)))
+          _ = assertEquals(readMedicine.map(_.price.salePrice), Some(BigDecimal(25)))
           _ = assertEquals(readInventory.map(_.quantity), Some(5))
           _ = assertEquals(readConsultation.map(_.status), Some(ConsultationStatus.Completed))
           _ = assertEquals(loadedAfterUpdate.state.clinic.employees.map(_.satisfaction), List(90.0))
           _ = assertEquals(loadedAfterUpdate.state.clinic.facilities.map(_.level), List(2))
           _ = assertEquals(loadedAfterUpdate.state.inventory.items.map(_.quantity), List(5))
-          _ = assertEquals(loadedAfterUpdate.patients.map(_.name), List("修改后的患者"))
+          _ = assertEquals(loadedAfterUpdate.patients.find(_.id == patient.id).map(_.name), Some("修改后的患者"))
           _ = assertEquals(loadedAfterUpdate.consultations.head.status, ConsultationStatus.Completed)
           _ <- ConsultationTable.delete(connection, consultation.id)
           _ <- EventTable.delete(connection, event.id)
@@ -155,9 +156,9 @@ final class Stage2PersistenceSuite extends CatsEffectSuite:
             game <- newGame(connection)
             staff = Staff(s"cascade-staff-${game.id}", "级联员工", StaffRole.Nurse, BigDecimal(150), 10, 10, 50, true)
             facility = Facility(s"cascade-facility-${game.id}", "级联设施", 1, BigDecimal(0), 0)
-            medicine = Medicine(s"cascade-medicine-${game.id}", "级联药品", BigDecimal(10), BigDecimal(20))
+            medicine = Medicine(s"cascade-medicine-${game.id}", "级联药品", MedicinePrice(BigDecimal(10), BigDecimal(20)))
             inventory = InventoryItem(s"cascade-inventory-${game.id}", medicine, 1, "2030-01-01")
-            patient = Patient(s"cascade-patient-${game.id}", "级联患者", PatientAttributes(1, 1, 1, 0.1))
+            patient = Patient(s"cascade-patient-${game.id}", "级联患者", PatientAttributes(1, 1, 1, 0.1), PatientEmotion.Calm)
             consultation = Consultation(
               s"cascade-consultation-${game.id}",
               patient,

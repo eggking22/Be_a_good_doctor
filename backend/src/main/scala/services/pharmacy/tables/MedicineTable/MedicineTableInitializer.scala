@@ -1,4 +1,4 @@
-// medicines 表初始化：药品目录是跨游戏共享的基础数据。
+// medicines 表初始化：药品基础目录是跨游戏共享的基础数据；价格由 MedicinePriceTableInitializer 初始化。
 package services.pharmacy.tables
 
 import cats.effect.IO
@@ -12,9 +12,12 @@ object MedicineTableInitializer:
       |create table if not exists medicines (
       |  id varchar(80) primary key,
       |  name varchar(120) not null,
-      |  purchase_price numeric(14, 2) not null,
-      |  sale_price numeric(14, 2) not null
+      |  level varchar(32) not null default 'Ordinary'
       |)
+      |;
+      |alter table medicines add column if not exists level varchar(32) not null default 'Ordinary'
+      |;
+      |update medicines set level = 'EasyDrug' where level = 'OverTheCounter'
       |""".stripMargin
 
   def initialize(connection: Connection): IO[Unit] =

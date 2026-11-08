@@ -7,6 +7,7 @@ import type { TreatmentEvaluation } from '@/objects/consultation/TreatmentEvalua
 // 与后端 Consultation 对齐：一次接诊过程不保存 gameId。
 export interface Consultation {
   id: string
+  caseId: string | null
   patient: Patient
   emotion: PatientEmotion
   status: ConsultationStatus

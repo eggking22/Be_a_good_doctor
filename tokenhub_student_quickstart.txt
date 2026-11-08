@@ -1,0 +1,327 @@
+腾讯云 TokenHub 学生 API 使用速查
+================================
+
+一、统一配置
+------------
+
+每位同学使用老师单独发给你的 API Key。把下面命令中的 YOUR_API_KEY 替换成自己的 Key：
+
+    export TOKENHUB_API_KEY="YOUR_API_KEY"
+
+广州站点的统一地址：
+
+    https://tokenhub.tencentmaas.com/v1
+
+请求鉴权统一使用：
+
+    Authorization: Bearer YOUR_API_KEY
+
+安装常用依赖：
+
+    pip install openai requests
+
+不要把 API Key 上传到 GitHub、公开 Notebook、博客或群聊。Key 泄露后立即告诉老师。
+
+
+二、当前开放的模型
+------------------
+
+1. 文本生成
+   模型：deepseek-v4.1-flash
+   用途：写作、代码、问答、总结、课程作业辅助。
+   接口：POST /v1/chat/completions
+
+2. 语音合成
+   模型：minimax-speech-2.8-hd
+   用途：把文字合成为高质量语音。
+   接口：POST /v1/wand/minimax-tts/sync_tts
+
+3. AI 配音
+   模型：wand-dubbing-clone-v2
+   用途：把视频中的语音翻译成其他语言，并生成配音和字幕。
+   接口：POST /v1/wand/dubbing/async_generation
+
+4. 音乐生成
+   模型：minimax-music-v3.0
+   用途：根据风格、情绪和歌词生成歌曲或纯音乐。
+   接口：POST /v1/wand/minimax-music/generation
+
+5. 多模态向量
+   模型：kinfra-vl-embedding-8b
+   用途：把文字、图片或视频转换为向量，用于 RAG、语义搜索和内容检索。
+   输出维度：4096
+   接口：POST /v1/embeddings/multimodal
+
+6. 视频生成（混元）
+   模型：hy-video-v1.5
+   用途：文生视频、图生视频。
+   当前版本：5 秒、720p。
+   接口：POST /v1/wand/hunyuan-video/generation
+
+7. 视频生成（Kling）
+   模型：kling-video-v3
+   用途：高质量文生视频、图生视频，可设置分辨率、比例、时长和原生音频。
+   接口：POST /v1/wand/kling/text-to-video
+
+8. 3D 场景生成
+   模型：hy-world2-scene
+   用途：根据文字或图片生成可以漫游的 3D 场景。
+   接口：POST /v1/wand/hunyuan-video/world2-scene
+
+9. 360° 全景图
+   模型：hy-world2-panorama
+   用途：生成可以环绕查看的 360° 全景图。
+   接口：POST /v1/wand/hunyuan-image/world2-panorama
+
+
+三、文本生成示例
+----------------
+
+Python（OpenAI SDK）：
+
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key="YOUR_API_KEY",
+        base_url="https://tokenhub.tencentmaas.com/v1",
+    )
+
+    response = client.chat.completions.create(
+        model="deepseek-v4.1-flash",
+        messages=[
+            {"role": "user", "content": "用三句话解释什么是 RAG。"}
+        ],
+        max_tokens=1024,
+    )
+
+    print(response.choices[0].message.content)
+
+
+四、语音合成示例
+----------------
+
+voice_id 请使用老师或官方文档提供的有效音色 ID：
+
+    curl -X POST "https://tokenhub.tencentmaas.com/v1/wand/minimax-tts/sync_tts" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "minimax-speech-2.8-hd",
+        "text": "欢迎来到人工智能课程。",
+        "voice_setting": {
+          "voice_id": "YOUR_VOICE_ID",
+          "speed": 1,
+          "vol": 1,
+          "pitch": 0
+        },
+        "audio_setting": {
+          "sample_rate": 32000,
+          "bitrate": 128000,
+          "format": "mp3",
+          "channel": 1
+        },
+        "output_format": "hex"
+      }'
+
+返回结果可能是 hex 音频数据。也可以按官方文档使用 URL 输出格式；拿到音频后请及时保存。
+
+
+五、音乐生成示例
+----------------
+
+下面示例生成一首无人声校园背景音乐：
+
+    curl -X POST "https://tokenhub.tencentmaas.com/v1/wand/minimax-music/generation" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "minimax-music-v3.0",
+        "prompt": "温暖、清新的校园背景音乐，钢琴和木吉他，适合课程开场",
+        "is_instrumental": true,
+        "output_format": "url"
+      }'
+
+返回的音频 URL 是临时地址，请及时下载保存。
+
+
+六、向量 Embedding 示例
+-----------------------
+
+把文字、图片或视频转换成一个 4096 维向量。下面先演示文字：
+
+    curl -X POST "https://tokenhub.tencentmaas.com/v1/embeddings/multimodal" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "kinfra-vl-embedding-8b",
+        "input": [
+          {"type": "text", "text": "校园人工智能课程介绍"}
+        ],
+        "instructions": "生成适合语义检索的向量",
+        "encoding_format": "float"
+      }'
+
+返回结果中的向量通常位于 data[0].embedding。图片和视频需要换成：
+
+    {"type": "image_url", "image_url": {"url": "https://example.com/image.jpg"}}
+    {"type": "video_url", "video_url": {"url": "https://example.com/video.mp4"}}
+
+输入 URL 必须能够被腾讯云服务器访问。
+
+
+七、混元视频生成示例
+--------------------
+
+混元视频是异步任务：先提交，再轮询。当前版本固定生成 5 秒、720p 视频。
+
+1）提交任务：
+
+    curl -X POST "https://tokenhub.tencentmaas.com/v1/wand/hunyuan-video/generation" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "hy-video-v1.5",
+        "prompt": "一只小猫走过阳光下的校园草地，写实电影感",
+        "aspect_ratio": "16:9"
+      }'
+
+记录返回的 task_id，然后每 3～5 秒查询一次：
+
+    curl -X GET "https://tokenhub.tencentmaas.com/v1/wand/hunyuan-video/tasks/YOUR_TASK_ID" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY"
+
+当 status=succeeded 时，从 videos[0].url 下载视频。
+
+
+八、Kling V3 视频示例
+---------------------
+
+Kling V3 支持 3～15 秒视频。下面生成一个 5 秒、有原生音频的视频：
+
+    curl -X POST "https://tokenhub.tencentmaas.com/v1/wand/kling/text-to-video" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "kling-video-v3",
+        "prompt": "无人机镜头缓慢飞过清晨的校园，电影感",
+        "settings": {
+          "resolution": "1080p",
+          "aspect_ratio": "16:9",
+          "duration": 5,
+          "audio": "native"
+        }
+      }'
+
+记录返回的 data.id，然后查询：
+
+    curl -X GET "https://tokenhub.tencentmaas.com/v1/wand/kling/tasks/YOUR_TASK_ID" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY"
+
+生成成功后从返回的 outputs[].url 下载视频。
+
+
+九、3D 场景生成示例
+------------------
+
+3D 场景生成通常需要 10～20 分钟，是异步任务。
+
+1）提交文字生成 3D 场景：
+
+    curl -X POST "https://tokenhub.tencentmaas.com/v1/wand/hunyuan-video/world2-scene" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "hy-world2-scene",
+        "prompt": "一座有树木、长椅和小路的大学校园庭院"
+      }'
+
+记录返回的 id，然后查询：
+
+    curl -X GET "https://tokenhub.tencentmaas.com/v1/wand/hunyuan-video/tasks/YOUR_TASK_ID" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY"
+
+成功后可从 data 中取得 scene_url、mesh_url、point_url 等文件地址。
+
+
+十、360° 全景图示例
+-------------------
+
+全景图是同步接口，通常一次请求直接返回结果：
+
+    curl -X POST "https://tokenhub.tencentmaas.com/v1/wand/hunyuan-image/world2-panorama" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "hy-world2-panorama",
+        "prompt": "现代大学图书馆内部，柔和天光，360度全景"
+      }'
+
+成功后从 data[0].super_resolution_image_url 下载全景图。
+
+
+十一、AI 配音示例
+-----------------
+
+AI 配音用于视频翻译和配音，是异步任务。input_url 必须是公网可访问的视频地址。
+
+1）提交中文视频配成英文：
+
+    curl -X POST "https://tokenhub.tencentmaas.com/v1/wand/dubbing/async_generation" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "wand-dubbing-clone-v2",
+        "input_url": "https://example.com/lesson.mp4",
+        "src_language": "zh",
+        "dst_language": "en"
+      }'
+
+记录返回的 id，然后每 3～5 秒查询：
+
+    curl -X GET "https://tokenhub.tencentmaas.com/v1/wand/dubbing/tasks/YOUR_ID" \
+      -H "Authorization: Bearer $TOKENHUB_API_KEY"
+
+当 status=completed 时，从 output.result_url 下载配音后的视频。
+
+
+十二、常见问题
+--------------
+
+401002：Key 无效，或者广州 Key 使用了新加坡地址。
+402xxx：模型没有开通、免费额度用完或额度不足。
+429xxx：请求太快，请降低并发并稍后重试。
+
+视频、3D 场景和 AI 配音需要轮询任务状态，不要重复提交同一个任务。
+很多生成结果 URL 只有短时间有效，生成成功后请立即下载。
+每个 Key 的累计 Token 配额是 lifetime 配额；不同模型价格不同，实际消耗以返回的 usage 和账单为准。
+
+
+十三、官方文档
+--------------
+
+API 总说明：
+https://cloud.tencent.com/document/product/1823/130078
+
+模型列表：
+https://cloud.tencent.com/document/product/1823/130051
+
+文本向量：
+https://cloud.tencent.com/document/product/1823/133515
+
+混元视频：
+https://cloud.tencent.com/document/product/1823/137202
+
+Kling 视频：
+https://cloud.tencent.com/document/product/1823/135742
+
+混元世界模型（3D）：
+https://cloud.tencent.com/document/product/1823/136578
+
+MiniMax 语音合成：
+https://cloud.tencent.com/document/product/1823/135796
+
+MiniMax 音乐生成：
+https://cloud.tencent.com/document/product/1823/135323
+
+WAND AI 配音：
+https://cloud.tencent.com/document/product/1823/135800

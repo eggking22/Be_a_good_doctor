@@ -2,7 +2,7 @@
 package services.patient.tables
 
 import cats.effect.IO
-import services.patient.objects.{Patient, PatientAttributes}
+import services.patient.objects.{Patient, PatientAttributes, PatientEmotion}
 import services.system.database.JdbcSupport
 
 import java.sql.Connection
@@ -11,8 +11,8 @@ object PatientTable:
   private val createSql =
     """
       |insert into patients
-      |  (id, game_id, name, illness_difficulty, payment_willingness, communication_difficulty, dispute_risk)
-      |values (?, ?, ?, ?, ?, ?, ?)
+      |  (id, game_id, name, initial_emotion, illness_difficulty, payment_willingness, communication_difficulty, dispute_risk)
+      |values (?, ?, ?, ?, ?, ?, ?, ?)
       |""".stripMargin
 
   def create(connection: Connection, gameId: String, patient: Patient): IO[Unit] =
@@ -20,14 +20,15 @@ object PatientTable:
       statement.setString(1, patient.id)
       statement.setString(2, gameId)
       statement.setString(3, patient.name)
-      statement.setInt(4, patient.attributes.illnessDifficulty)
-      statement.setInt(5, patient.attributes.paymentWillingness)
-      statement.setInt(6, patient.attributes.communicationDifficulty)
-      statement.setDouble(7, patient.attributes.disputeRisk)
+      statement.setString(4, patient.initialEmotion.toString)
+      statement.setInt(5, patient.attributes.illnessDifficulty)
+      statement.setInt(6, patient.attributes.paymentWillingness)
+      statement.setInt(7, patient.attributes.communicationDifficulty)
+      statement.setDouble(8, patient.attributes.disputeRisk)
     }.map(_ => ())
 
   private val findByIdSql =
-    "select id, name, illness_difficulty, payment_willingness, communication_difficulty, dispute_risk from patients where id = ?"
+    "select id, name, initial_emotion, illness_difficulty, payment_willingness, communication_difficulty, dispute_risk from patients where id = ?"
 
   def findById(connection: Connection, patientId: String): IO[Option[Patient]] =
     JdbcSupport.queryOne(
@@ -36,7 +37,7 @@ object PatientTable:
     )(_.setString(1, patientId))(readPatient)
 
   private val findByGameIdSql =
-    "select id, name, illness_difficulty, payment_willingness, communication_difficulty, dispute_risk from patients where game_id = ? order by id"
+    "select id, name, initial_emotion, illness_difficulty, payment_willingness, communication_difficulty, dispute_risk from patients where game_id = ? order by id"
 
   def findByGameId(connection: Connection, gameId: String): IO[List[Patient]] =
     JdbcSupport.query(
@@ -44,9 +45,18 @@ object PatientTable:
       findByGameIdSql
     )(_.setString(1, gameId))(readPatient)
 
+  private val findByGameIdAndIdSql =
+    "select id, name, initial_emotion, illness_difficulty, payment_willingness, communication_difficulty, dispute_risk from patients where game_id = ? and id = ?"
+
+  def findByGameIdAndId(connection: Connection, gameId: String, patientId: String): IO[Option[Patient]] =
+    JdbcSupport.queryOne(connection, findByGameIdAndIdSql) { statement =>
+      statement.setString(1, gameId)
+      statement.setString(2, patientId)
+    }(readPatient)
+
   private val updateSql =
     """
-      |update patients set name = ?, illness_difficulty = ?, payment_willingness = ?,
+      |update patients set name = ?, initial_emotion = ?, illness_difficulty = ?, payment_willingness = ?,
       |communication_difficulty = ?, dispute_risk = ? where id = ?
       |""".stripMargin
 
@@ -57,11 +67,12 @@ object PatientTable:
       s"未找到患者：${patient.id}"
     ) { statement =>
       statement.setString(1, patient.name)
-      statement.setInt(2, patient.attributes.illnessDifficulty)
-      statement.setInt(3, patient.attributes.paymentWillingness)
-      statement.setInt(4, patient.attributes.communicationDifficulty)
-      statement.setDouble(5, patient.attributes.disputeRisk)
-      statement.setString(6, patient.id)
+      statement.setString(2, patient.initialEmotion.toString)
+      statement.setInt(3, patient.attributes.illnessDifficulty)
+      statement.setInt(4, patient.attributes.paymentWillingness)
+      statement.setInt(5, patient.attributes.communicationDifficulty)
+      statement.setDouble(6, patient.attributes.disputeRisk)
+      statement.setString(7, patient.id)
     }
 
   private val deleteSql = "delete from patients where id = ?"
@@ -78,5 +89,6 @@ object PatientTable:
         paymentWillingness = resultSet.getInt("payment_willingness"),
         communicationDifficulty = resultSet.getInt("communication_difficulty"),
         disputeRisk = resultSet.getDouble("dispute_risk")
-      )
+      ),
+      initialEmotion = PatientEmotion.fromString(resultSet.getString("initial_emotion")).fold(message => throw new IllegalStateException(message), identity)
     )

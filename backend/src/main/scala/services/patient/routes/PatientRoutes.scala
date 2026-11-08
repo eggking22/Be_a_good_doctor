@@ -1,7 +1,16 @@
-// 患者服务注册：后续注册患者生成、队列和患者状态 API Message。
+// 患者服务注册：患者生成和后续队列相关 API Message。
 package services.patient.routes
 
+import io.circe.generic.auto.*
+import services.patient.api.GeneratePatientAPIMessage
+import services.patient.objects.Patient
 import services.system.api.ApiServiceMessages
+import services.system.api.RegisteredAPIMessage
 
 object PatientRoutes:
-  val apiMessages: ApiServiceMessages = ApiServiceMessages("patient", Nil)
+  val apiMessages: ApiServiceMessages = ApiServiceMessages(
+    "patient",
+    List(
+      RegisteredAPIMessage.api[GeneratePatientAPIMessage, Patient]
+    )
+  )

@@ -31,6 +31,12 @@ API 名称由 Message 类型统一推导，Routes 只登记服务级 API 列表�
 
 应用启动时由 `DatabaseSchemaInitializer` 按外键依赖顺序调用各表所属的 `XXTableInitializer`。初始化器使用 `IF NOT EXISTS` 和兼容性 `ALTER TABLE`，不删除或重建用户数据。
 
+症状、疾病和药品目录由所有游戏共享：`disease_symptoms` 和 `disease_medicines` 分别保存疾病与症状、疾病与药品的多对多关联。启动时会补齐三组游戏示例：流鼻涕、嗓子疼 → 感冒 → 感冒药；发热、咳嗽、头痛 → 流感 → 流感对症药；发热、咳嗽、胸闷 → 重度呼吸道感染 → 呼吸道特效药。示例数据定义在 `services/pharmacy/utils/InitialMedicalCatalog.scala`，疾病难度覆盖患者属性使用的 1、3、5。
+
+感冒药的示例初始采购价为 10、售价为 20，定义在 `services/pharmacy/utils/InitialMedicinePrices.scala`，仅用于游戏数值。初始化按编号补缺，不会覆盖数据库中已有的名称或价格；调整已入库的价格应更新数据库中的药品记录。示例药品只是共享目录，不会自动加入任意游戏的库存。
+
+第一阶段接诊由 `StartConsultationAPIMessage` 提供：它校验患者归属，按患者疾病难度抽取隐藏疾病，生成并持久化病例症状快照，再创建接诊记录。病例快照保存当时的疾病名称、难度和症状名称，后续修改目录数据不会影响历史病例；响应只返回公开的患者和接诊信息。
+
 游戏删除只删除 `game_sessions`，其员工、设施、患者、接诊、对话、库存、事件、声誉历史、流水和日结算由外键级联删除；药品目录不属于某一局游戏，库存清除后才允许删除药品。
 
 ## 当前状态

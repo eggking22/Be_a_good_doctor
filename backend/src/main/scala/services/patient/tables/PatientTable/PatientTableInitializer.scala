@@ -13,6 +13,7 @@ object PatientTableInitializer:
       |  id varchar(80) primary key,
       |  game_id varchar(80) not null,
       |  name varchar(120) not null,
+      |  initial_emotion varchar(32) not null,
       |  illness_difficulty integer not null check (illness_difficulty between 1 and 5),
       |  payment_willingness integer not null check (payment_willingness between 1 and 5),
       |  communication_difficulty integer not null check (communication_difficulty between 1 and 5),
@@ -20,6 +21,9 @@ object PatientTableInitializer:
       |  constraint fk_patient_game foreign key (game_id) references game_sessions(id) on delete cascade
       |);
       |create index if not exists idx_patients_game_id on patients(game_id);
+      |alter table patients add column if not exists initial_emotion varchar(32);
+      |update patients set initial_emotion = 'Calm' where initial_emotion is null;
+      |alter table patients alter column initial_emotion set not null;
       |do $$ begin
       |  if not exists (select 1 from pg_constraint where conname = 'fk_patient_game') then
       |    alter table patients add constraint fk_patient_game foreign key (game_id) references game_sessions(id) on delete cascade;

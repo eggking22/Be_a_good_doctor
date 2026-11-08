@@ -2,7 +2,7 @@
 package services.pharmacy.tables
 
 import cats.effect.IO
-import services.pharmacy.objects.{Inventory, InventoryItem, Medicine}
+import services.pharmacy.objects.{Inventory, InventoryItem, Medicine, MedicineLevel, MedicinePrice}
 import services.system.database.JdbcSupport
 
 import java.sql.Connection
@@ -22,9 +22,10 @@ object InventoryTable:
   private val selectSql =
     """
       |select i.id, i.quantity, i.expiry_date, m.id as medicine_id, m.name,
-      |       m.purchase_price, m.sale_price
+      |       p.purchase_price, p.sale_price, m.level
       |from medicine_inventory i
       |join medicines m on m.id = i.medicine_id
+      |join medicine_prices p on p.medicine_id = m.id
       |""".stripMargin
 
   private val findByIdSql = selectSql + "where i.id = ?"
@@ -64,8 +65,12 @@ object InventoryTable:
       medicine = Medicine(
         id = resultSet.getString("medicine_id"),
         name = resultSet.getString("name"),
-        purchasePrice = BigDecimal(resultSet.getBigDecimal("purchase_price")),
-        salePrice = BigDecimal(resultSet.getBigDecimal("sale_price"))
+        price = MedicinePrice(
+          purchasePrice = BigDecimal(resultSet.getBigDecimal("purchase_price")),
+          salePrice = BigDecimal(resultSet.getBigDecimal("sale_price"))
+        ),
+        level = MedicineLevel.fromString(resultSet.getString("level"))
+          .fold(message => throw new IllegalStateException(message), identity)
       ),
       quantity = resultSet.getInt("quantity"),
       expiryDate = resultSet.getObject("expiry_date", classOf[java.time.LocalDate]).toString

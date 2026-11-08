@@ -1,11 +1,14 @@
 import type { GameState } from '@/objects/game/GameState'
+import type { ClinicConversation } from '@/pages/ClinicHomePage/objects/ClinicConversation'
+import type { PatientPortrait } from '@/pages/ClinicHomePage/objects/PatientPortrait'
 
 export type ClinicPanel = 'consultation' | 'pharmacy' | 'staff' | 'finance' | 'expansion'
 
-// 明确表达患者在诊室中的生命周期，避免只用布尔值隐藏进出场过程。
-export type PatientStage = 'outside' | 'entering' | 'consulting' | 'leaving'
+// 明确表达患者在诊室中的生命周期，避免只用布尔值隐藏进场过程。
+export type PatientStage = 'outside' | 'entering' | 'consulting' | 'ended'
 
 export type ClinicHomeStatus =
+  | { status: 'loading' }
   | { status: 'ready'; game: GameState; season: string; gameTime: string; isOpen: boolean }
   | { status: 'empty'; message: string }
   | { status: 'error'; message: string }
@@ -13,4 +16,10 @@ export type ClinicHomeStatus =
 export interface ClinicHomeInteractionState {
   activePanel: ClinicPanel | null
   patientStage: PatientStage
+  patientPortrait: PatientPortrait | null
+  conversation: ClinicConversation | null
+  isStartingConsultation: boolean
+  isSendingText: boolean
+  isEndingConsultation: boolean
+  consultationError: string | null
 }

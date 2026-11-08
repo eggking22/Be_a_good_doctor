@@ -14,9 +14,9 @@ object ConsultationTable:
   private val createSql =
     """
       |insert into consultations
-      |  (id, game_id, patient_id, emotion, status, dialogue_count, cash_change,
+      |  (id, game_id, patient_id, case_id, emotion, status, dialogue_count, cash_change,
       |   reputation_change, treatment_matched, treatment_reputation_delta, treatment_reason)
-      |values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      |values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       |""".stripMargin
 
   def create(connection: Connection, gameId: String, consultation: Consultation): IO[Unit] =
@@ -24,12 +24,13 @@ object ConsultationTable:
       statement.setString(1, consultation.id)
       statement.setString(2, gameId)
       statement.setString(3, consultation.patient.id)
-      statement.setString(4, consultation.emotion.toString)
-      statement.setString(5, consultation.status.toString)
-      statement.setInt(6, consultation.dialogueCount)
-      statement.setBigDecimal(7, consultation.cashChange.bigDecimal)
-      statement.setDouble(8, consultation.reputationChange)
-      bindTreatment(statement, consultation.treatmentEvaluation, 9)
+      bindOptionalString(statement, 4, consultation.caseId)
+      statement.setString(5, consultation.emotion.toString)
+      statement.setString(6, consultation.status.toString)
+      statement.setInt(7, consultation.dialogueCount)
+      statement.setBigDecimal(8, consultation.cashChange.bigDecimal)
+      statement.setDouble(9, consultation.reputationChange)
+      bindTreatment(statement, consultation.treatmentEvaluation, 10)
     }.map(_ => ())
 
   private val findByIdSql = "where c.id = ?"
@@ -44,7 +45,7 @@ object ConsultationTable:
 
   private val updateSql =
     """
-      |update consultations set patient_id = ?, emotion = ?, status = ?, dialogue_count = ?,
+      |update consultations set patient_id = ?, case_id = ?, emotion = ?, status = ?, dialogue_count = ?,
       |cash_change = ?, reputation_change = ?, treatment_matched = ?,
       |treatment_reputation_delta = ?, treatment_reason = ? where id = ?
       |""".stripMargin
@@ -56,13 +57,14 @@ object ConsultationTable:
       s"未找到接诊记录：${consultation.id}"
     ) { statement =>
       statement.setString(1, consultation.patient.id)
-      statement.setString(2, consultation.emotion.toString)
-      statement.setString(3, consultation.status.toString)
-      statement.setInt(4, consultation.dialogueCount)
-      statement.setBigDecimal(5, consultation.cashChange.bigDecimal)
-      statement.setDouble(6, consultation.reputationChange)
-      bindTreatment(statement, consultation.treatmentEvaluation, 7)
-      statement.setString(10, consultation.id)
+      bindOptionalString(statement, 2, consultation.caseId)
+      statement.setString(3, consultation.emotion.toString)
+      statement.setString(4, consultation.status.toString)
+      statement.setInt(5, consultation.dialogueCount)
+      statement.setBigDecimal(6, consultation.cashChange.bigDecimal)
+      statement.setDouble(7, consultation.reputationChange)
+      bindTreatment(statement, consultation.treatmentEvaluation, 8)
+      statement.setString(11, consultation.id)
     }
 
   private val deleteSql = "delete from consultations where id = ?"
@@ -72,10 +74,11 @@ object ConsultationTable:
 
   private val selectSql =
     """
-      |select c.id, c.emotion, c.status, c.dialogue_count, c.cash_change, c.reputation_change,
+      |select c.id, c.case_id, c.emotion, c.status, c.dialogue_count, c.cash_change, c.reputation_change,
       |       c.treatment_matched, c.treatment_reputation_delta, c.treatment_reason,
       |       p.id as patient_id, p.name as patient_name, p.illness_difficulty,
-      |       p.payment_willingness, p.communication_difficulty, p.dispute_risk
+      |       p.payment_willingness, p.communication_difficulty, p.dispute_risk,
+      |       p.initial_emotion as patient_initial_emotion
       |from consultations c
       |join patients p on p.id = c.patient_id
       |""".stripMargin
@@ -97,6 +100,7 @@ object ConsultationTable:
   private def readConsultation(resultSet: java.sql.ResultSet): Consultation =
     Consultation(
       id = resultSet.getString("id"),
+      caseId = Option(resultSet.getString("case_id")),
       patient = Patient(
         id = resultSet.getString("patient_id"),
         name = resultSet.getString("patient_name"),
@@ -105,7 +109,8 @@ object ConsultationTable:
           paymentWillingness = resultSet.getInt("payment_willingness"),
           communicationDifficulty = resultSet.getInt("communication_difficulty"),
           disputeRisk = resultSet.getDouble("dispute_risk")
-        )
+        ),
+        initialEmotion = PatientEmotion.fromString(resultSet.getString("patient_initial_emotion")).fold(message => throw new IllegalStateException(message), identity)
       ),
       emotion = PatientEmotion.fromString(resultSet.getString("emotion")).fold(message => throw new IllegalStateException(message), identity),
       status = ConsultationStatus.fromString(resultSet.getString("status")).fold(message => throw new IllegalStateException(message), identity),
@@ -115,6 +120,11 @@ object ConsultationTable:
       cashChange = BigDecimal(resultSet.getBigDecimal("cash_change")),
       reputationChange = resultSet.getDouble("reputation_change")
     )
+
+  private def bindOptionalString(statement: java.sql.PreparedStatement, index: Int, value: Option[String]): Unit =
+    value match
+      case Some(item) => statement.setString(index, item)
+      case None => statement.setNull(index, Types.VARCHAR)
 
   private def readTreatment(resultSet: java.sql.ResultSet): Option[TreatmentEvaluation] =
     Option(resultSet.getObject("treatment_matched")).map(_ =>

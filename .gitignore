@@ -11,6 +11,7 @@ pnpm-debug.log*
 # Scala / sbt
 backend/target/
 backend/project/target/
+backend/project/project/
 backend/.bsp/
 backend/.metals/
 backend/.scala-build/
@@ -33,5 +34,6 @@ data/
 .idea/
 .vscode/
 *.iml
+~$*
 .DS_Store
 Thumbs.db

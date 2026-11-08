@@ -1,46 +1,47 @@
-import type { ClinicHomeStatus } from '@/pages/ClinicHomePage/objects/ClinicHomeViewState'
 import BottomActionBar from '@/pages/ClinicHomePage/components/BottomActionBar'
 import ClinicHud from '@/pages/ClinicHomePage/components/ClinicHud'
 import ClinicRoomScene from '@/pages/ClinicHomePage/components/ClinicRoomScene'
 import ClinicSidePanel from '@/pages/ClinicHomePage/components/ClinicSidePanel'
+import PatientVisitOverlay from '@/pages/ClinicHomePage/components/PatientVisitOverlay'
 import { useClinicHomePage } from '@/pages/ClinicHomePage/hooks/useClinicHomePage'
 
-const initialStatus: ClinicHomeStatus = {
-  status: 'ready',
-  game: {
-    id: 'game-preview',
-    playerName: '医生',
-    currentDay: 1,
-    finance: {
-      cash: 10000,
-      cashFlow: { income: 860, expense: 240 },
-      dailyStatement: null,
-    },
-    reputation: { score: 60 },
-    clinic: { facilities: [], employees: [] },
-    inventory: { items: [] },
-    bankrupt: false,
-    createdAt: '2026-11-06T08:00:00+08:00',
-    updatedAt: '2026-11-06T08:00:00+08:00',
-  },
-  season: '春季',
-  gameTime: '08:30',
-  isOpen: true,
-}
-
 export default function ClinicHomePage() {
-  const page = useClinicHomePage(initialStatus)
+  const page = useClinicHomePage()
+
+  if (page.status.status === 'loading') {
+    return <div className="pixel-font flex min-h-screen items-center justify-center bg-[#123b5f] p-6 text-center text-[#effaff]">正在连接诊所系统…</div>
+  }
 
   if (page.status.status !== 'ready') {
-    return <div className="flex min-h-screen items-center justify-center bg-[#f4e6d1] p-6 text-center font-bold text-[#71564c]">{page.status.message}</div>
+    return (
+      <div className="pixel-font flex min-h-screen flex-col items-center justify-center gap-4 bg-[#123b5f] p-6 text-center text-[#effaff]">
+        <p>{page.status.message}</p>
+        <button type="button" onClick={page.retryGame} className="pixel-button px-5 py-3 text-xs">重新连接</button>
+      </div>
+    )
   }
 
   const { game, season, gameTime, isOpen } = page.status
-  const isPatientPresent = page.interaction.patientStage !== 'outside'
+  const isPatientPresent = page.interaction.patientStage === 'entering' || page.interaction.patientStage === 'consulting'
 
   return (
-    <div className="relative h-screen min-h-[42rem] overflow-hidden bg-[#657665] font-sans selection:bg-[#dcc080] selection:text-[#294238]">
+    <div className="pixel-font relative h-screen min-h-[42rem] overflow-hidden bg-[#123b5f] selection:bg-[#78d7ff] selection:text-[#08243c]">
       <ClinicRoomScene />
+      <PatientVisitOverlay
+        patient={page.interaction.patientPortrait}
+        patientName={page.interaction.conversation?.patient.name ?? null}
+        stage={page.interaction.patientStage}
+        messages={page.interaction.conversation?.messages ?? []}
+        isStarting={page.interaction.isStartingConsultation}
+        isSendingText={page.interaction.isSendingText}
+        isEnding={page.interaction.isEndingConsultation}
+        shoppingList={page.interaction.conversation?.shoppingList ?? []}
+        endReason={page.interaction.conversation?.endReason ?? null}
+        error={page.interaction.consultationError}
+        onSubmitText={page.submitPlayerText}
+        onFinishConsultation={page.finishConsultation}
+        onDismissEndedConsultation={page.dismissEndedConsultation}
+      />
       <ClinicHud game={game} season={season} gameTime={gameTime} isOpen={isOpen} />
 
       <BottomActionBar activePanel={page.interaction.activePanel} onOpenPanel={page.openPanel} />
@@ -49,9 +50,11 @@ export default function ClinicHomePage() {
         <ClinicSidePanel
           panel={page.interaction.activePanel}
           isPatientPresent={isPatientPresent}
+          patientName={page.interaction.conversation?.patient.name ?? null}
+          isStartingConsultation={page.interaction.isStartingConsultation}
+          error={page.interaction.consultationError}
           onClose={page.closePanel}
           onWelcomePatient={page.welcomePatient}
-          onFinishConsultation={page.finishConsultation}
         />
       )}
     </div>

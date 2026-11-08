@@ -8,7 +8,9 @@ final case class Patient(
     id: String,
     name: String,
     // 患者的四个经营属性集中在 PatientAttributes，便于独立生成和校验。
-    attributes: PatientAttributes
+    attributes: PatientAttributes,
+    // 初始情绪在患者生成时确定，并在接诊开始前保持可查询。
+    initialEmotion: PatientEmotion
 )
 
 object Patient:

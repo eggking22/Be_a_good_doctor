@@ -16,7 +16,7 @@ lazy val root = (project in file(".")).settings(
     "org.typelevel" %% "log4cats-slf4j" % "2.7.0",
     "org.slf4j" % "slf4j-simple" % "2.0.13",
     "org.scalameta" %% "munit" % "0.7.29" % Test,
-    "org.typelevel" %% "munit-cats-effect-3" % "1.5.0" % Test
+    "org.typelevel" %% "munit-cats-effect-3" % "1.0.7" % Test
   ),
   Compile / run / mainClass := Some("app.Main")
 )

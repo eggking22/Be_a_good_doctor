@@ -10,8 +10,10 @@ import services.economy.tables.{DailyStatementTable, LedgerTable}
 import services.event.tables.EventTable
 import services.game.objects.{GameSessionRecord, GameState, LoadedGameState}
 import services.game.calculators.GameDayCalculator
+import services.game.calculators.PatientArrivalCalculator
 import services.game.tables.GameStateTable
 import services.game.utils.GameIdGenerator
+import services.patient.api.GeneratePatientAPIMessage
 import services.patient.tables.PatientTable
 import services.pharmacy.tables.InventoryTable
 import services.reputation.tables.ReputationTable
@@ -29,7 +31,9 @@ object GameStateOperations:
     if normalizedName.isEmpty then IO.raiseError(HttpError.BadRequest("玩家名称不能为空。"))
     else
       val state = initialState(normalizedName, Instant.now())
-      GameStateTable.insert(connection, toSessionRecord(state)).map(_ => state)
+      GameStateTable.insert(connection, toSessionRecord(state)).flatMap { _ =>
+        generatePatients(connection, state.id, PatientArrivalCalculator.initialPatientCount).map(_ => state)
+      }
 
   private[game] def get(connection: Connection, gameId: String): IO[GameState] =
     loadComplete(connection, gameId).map(_.state)
@@ -77,7 +81,14 @@ object GameStateOperations:
         IO.raiseError(HttpError.Conflict("游戏已经破产，不能继续推进经营日。"))
       case state =>
         val nextState = GameDayCalculator.advanceOneDay(state)
-        GameStateTable.update(connection, toSessionRecord(nextState)).map(_ => nextState)
+        GameStateTable.update(connection, toSessionRecord(nextState)).flatMap { _ =>
+          generatePatients(connection, nextState.id, PatientArrivalCalculator.dailyPatientCount(nextState.reputation.score)).map(_ => nextState)
+        }
+    }
+
+  private[game] def generatePatients(connection: Connection, gameId: String, count: Int): IO[Unit] =
+    List.fill(count.max(0))(()).foldLeft(IO.unit) { (program, _) =>
+      program.flatMap(_ => GeneratePatientAPIMessage(gameId).plan(connection).map(_ => ()))
     }
 
   private[game] def initialState(playerName: String, now: Instant): GameState =
